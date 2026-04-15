@@ -3,6 +3,7 @@
 
 extern crate alloc;
 
+mod cabac;
 mod decoder;
 mod pps;
 mod slice;

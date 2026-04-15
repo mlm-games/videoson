@@ -121,13 +121,8 @@ impl H264Decoder {
                 let sh = bs(crate::slice::parse_slice_header_rbsp(rbsp, &self.ps))?;
 
                 let pps = self.ps.get_pps(sh.pps_id)?;
-                if pps.entropy_coding_mode_flag {
-                    return Err(VideosonError::Unsupported(
-                        "CABAC not supported (entropy_coding_mode_flag=1)",
-                    ));
-                }
 
-                let frame = decode_idr_ipcm_slice(rbsp, &self.ps, &sh)?;
+                let frame = decode_idr_ipcm_slice(rbsp, &self.ps, &sh, pps)?;
                 self.out.push_back(frame);
                 Ok(())
             }

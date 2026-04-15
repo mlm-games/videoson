@@ -591,6 +591,7 @@ dependencies = [
  "videoson-common",
  "videoson-core",
  "videoson-format-ivf",
+ "videoson-format-mp4",
 ]
 
 [[package]]
@@ -621,6 +622,14 @@ version = "0.1.0"
 
 [[package]]
 name = "videoson-format-ivf"
+version = "0.1.0"
+dependencies = [
+ "videoson-common",
+ "videoson-core",
+]
+
+[[package]]
+name = "videoson-format-mp4"
 version = "0.1.0"
 dependencies = [
  "videoson-common",

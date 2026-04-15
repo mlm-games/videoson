@@ -102,6 +102,19 @@ impl<'a> BitReader<'a> {
         Ok(())
     }
 
+    #[inline]
+    pub fn bit_pos(&self) -> usize {
+        self.bit_pos
+    }
+
+    pub fn set_bit_pos(&mut self, bit_pos: usize) -> BitstreamResult<()> {
+        if bit_pos > self.buf.len() * 8 {
+            return Err(BitstreamError::Eof);
+        }
+        self.bit_pos = bit_pos;
+        Ok(())
+    }
+
     pub fn remaining_bytes(&self) -> BitstreamResult<&'a [u8]> {
         if !self.is_byte_aligned() {
             return Err(BitstreamError::Invalid("remaining_bytes: not byte-aligned"));

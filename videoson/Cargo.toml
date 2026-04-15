@@ -9,3 +9,4 @@ rust-version.workspace = true
 videoson-core = { path = "../videoson-core" }
 videoson-common = { path = "../videoson-common" }
 videoson-format-ivf = { path = "../videoson-format-ivf" }
+videoson-format-mp4 = { path = "../videoson-format-mp4" }
