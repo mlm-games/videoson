@@ -11,7 +11,7 @@ use videoson_core::{
 };
 
 use crate::pps::Pps;
-use crate::slice::{decode_idr_ipcm_slice, SliceHeader};
+use crate::slice::decode_idr_ipcm_slice;
 use crate::sps::Sps;
 
 pub(crate) struct ParamSets {
@@ -47,7 +47,7 @@ impl ParamSets {
         }
     }
 
-    pub fn get_pps(&self, pps_id: u32) -> core::result::Result<&Pps, VideosonError> {
+    pub(crate) fn get_pps(&self, pps_id: u32) -> core::result::Result<&Pps, VideosonError> {
         let idx = pps_id as usize;
         self.pps
             .get(idx)
@@ -55,7 +55,7 @@ impl ParamSets {
             .ok_or(VideosonError::InvalidData("missing PPS"))
     }
 
-    pub fn get_sps(&self, sps_id: u32) -> core::result::Result<&Sps, VideosonError> {
+    pub(crate) fn get_sps(&self, sps_id: u32) -> core::result::Result<&Sps, VideosonError> {
         let idx = sps_id as usize;
         self.sps
             .get(idx)
@@ -106,7 +106,7 @@ impl H264Decoder {
         let rbsp = ebsp_to_rbsp(n.payload_ebsp, &mut self.rbsp_scratch);
 
         match n.header.nal_unit_type {
-            6 => Ok(()),
+            6 => Ok(()), // SEI ignored
             7 => {
                 let sps = bs(crate::sps::parse_sps_rbsp(rbsp))?;
                 self.ps.put_sps(sps);
@@ -134,9 +134,9 @@ impl H264Decoder {
             1 => Err(VideosonError::Unsupported(
                 "non-IDR slice not supported in M0",
             )),
-            9 => Ok(()),
-            10 | 11 | 12 => Ok(()),
-            _ => Ok(()),
+            9 => Ok(()),            // AUD ignored
+            10 | 11 | 12 => Ok(()), // EOS/filler ignored
+            _ => Ok(()),            // other NAL types ignored
         }
     }
 }

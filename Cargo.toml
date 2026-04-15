@@ -5,6 +5,7 @@ members = [
   "videoson-core",
   "videoson-common",
   "videoson-codec-h264",
+  "testbench",
 ]
 
 [workspace.package]
