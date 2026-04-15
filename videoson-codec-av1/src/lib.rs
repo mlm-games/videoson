@@ -3,6 +3,6 @@
 
 extern crate alloc;
 
-mod decoder;
+mod backend;
 
-pub use decoder::Av1Decoder;
+pub use backend::Av1Decoder;

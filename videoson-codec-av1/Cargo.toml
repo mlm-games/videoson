@@ -6,8 +6,28 @@ license.workspace = true
 rust-version.workspace = true
 
 [features]
-default = ["std"]
+default = ["std", "backend-rav1d", "bitdepth_8", "bitdepth_16"]
+
 std = ["videoson-core/std"]
+
+backend-rav1d = ["dep:rav1d", "dep:libc"]
+backend-dav1d = ["dep:dav1d"]
+
+asm = [
+  "rav1d/asm",
+  "rav1d/asm_arm64_dotprod",
+  "rav1d/asm_arm64_i8mm",
+  "rav1d/asm_arm64_sve2",
+]
+
+bitdepth_8 = ["rav1d/bitdepth_8"]
+bitdepth_16 = ["rav1d/bitdepth_16"]
 
 [dependencies]
 videoson-core = { path = "../videoson-core", default-features = false }
+
+libc = { version = "0.2", optional = true }
+rav1d = { version = "1.1.0", default-features = false, optional = true }
+
+[target.'cfg(not(any(target_arch = "wasm32", target_os = "android")))'.dependencies]
+dav1d = { version = "0.11", optional = true }
