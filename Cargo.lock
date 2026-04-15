@@ -11,6 +11,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "videoson-codec-h264"
+version = "0.1.0"
+dependencies = [
+ "videoson-common",
+ "videoson-core",
+]
+
+[[package]]
 name = "videoson-common"
 version = "0.1.0"
 
