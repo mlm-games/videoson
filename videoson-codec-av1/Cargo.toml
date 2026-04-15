@@ -6,23 +6,8 @@ license.workspace = true
 rust-version.workspace = true
 
 [features]
-default = ["std", "bitdepth_8", "bitdepth_16"]
-
+default = ["std"]
 std = ["videoson-core/std"]
-
-asm = [
-  "rav1d/asm",
-  "rav1d/asm_arm64_dotprod",
-  "rav1d/asm_arm64_i8mm",
-  "rav1d/asm_arm64_sve2",
-]
-
-bitdepth_8 = ["rav1d/bitdepth_8"]
-bitdepth_16 = ["rav1d/bitdepth_16"]
 
 [dependencies]
 videoson-core = { path = "../videoson-core", default-features = false }
-
-libc = "0.2"
-
-rav1d = { version = "1.1", default-features = false, features = ["bitdepth_8", "bitdepth_16"] }

@@ -6,6 +6,7 @@ members = [
   "videoson-common",
   "videoson-codec-h264",
   "videoson-codec-av1",
+  "videoson-format-ivf",
   "testbench",
 ]
 
@@ -16,3 +17,5 @@ license = "MIT OR Apache-2.0"
 rust-version = "1.77"
 
 [workspace.dependencies]
+videoson-core = { path = "videoson-core", version = "0.0.0" }
+videoson-common = { path = "videoson-common", version = "0.0.0" }

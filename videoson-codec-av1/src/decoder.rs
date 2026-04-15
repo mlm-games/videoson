@@ -1,12 +1,10 @@
 // videoson-codec-av1/src/decoder.rs
-extern crate alloc;
 
 use videoson_core::{
     CodecType, Packet, Result, VideoCodecParams, VideoDecoder, VideoDecoderOptions, VideoFrame,
     VideosonError,
 };
 
-#[derive(Debug)]
 pub struct Av1Decoder {
     params: VideoCodecParams,
     _opts: VideoDecoderOptions,
@@ -16,9 +14,6 @@ impl VideoDecoder for Av1Decoder {
     fn try_new(params: &VideoCodecParams, opts: &VideoDecoderOptions) -> Result<Self> {
         if params.codec != CodecType::AV1 {
             return Err(VideosonError::InvalidData("not AV1"));
-        }
-        if !params.extradata.is_empty() {
-            return Err(VideosonError::InvalidData("AV1 extradata not supported"));
         }
         Ok(Self {
             params: params.clone(),
