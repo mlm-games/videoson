@@ -231,6 +231,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5e5032e24019045c762d3c0f28f5b6b8bbf38563a65908389bf7978758920897"
 
 [[package]]
+name = "matroska-demuxer"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fb23384e6bf1431427b45e7db9574146e948ef0cd975018693e6f53eb6d44199"
+
+[[package]]
 name = "memchr"
 version = "2.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -531,6 +537,9 @@ dependencies = [
  "less-avc",
  "videoson-codec-h264",
  "videoson-core",
+ "videoson-format-ivf",
+ "videoson-format-mkv",
+ "videoson-format-mp4",
 ]
 
 [[package]]
@@ -631,6 +640,15 @@ version = "0.1.0"
 name = "videoson-format-ivf"
 version = "0.1.0"
 dependencies = [
+ "videoson-common",
+ "videoson-core",
+]
+
+[[package]]
+name = "videoson-format-mkv"
+version = "0.1.0"
+dependencies = [
+ "matroska-demuxer",
  "videoson-common",
  "videoson-core",
 ]

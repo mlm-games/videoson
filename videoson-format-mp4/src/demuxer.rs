@@ -45,6 +45,22 @@ fn be_u64(b: &[u8]) -> u64 {
     u64::from_be_bytes([b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]])
 }
 
+fn parse_tkhd_track_id(data: &[u8], ps: usize, pe: usize) -> Result<Option<u32>, VideosonError> {
+    if pe <= ps || pe - ps < 24 {
+        return Ok(None);
+    }
+    let version = data[ps];
+    let off = match version {
+        0 => 12,
+        1 => 20,
+        _ => return Ok(None),
+    };
+    if pe - ps < off + 4 {
+        return Ok(None);
+    }
+    Ok(Some(be_u32(&data[ps + off..ps + off + 4])))
+}
+
 fn read_fullbox_version(flags: &[u8]) -> u8 {
     flags[0]
 }
@@ -296,6 +312,25 @@ fn build_sample_offsets(
     Ok(offsets)
 }
 
+const VISUAL_SAMPLE_ENTRY_HEADER_LEN: usize = 78;
+
+fn parse_visual_sample_entry_dimensions(
+    data: &[u8],
+    entry_ps: usize,
+    entry_pe: usize,
+) -> Option<(u32, u32)> {
+    if entry_pe < entry_ps || entry_pe - entry_ps < 28 {
+        return None;
+    }
+    let w = be_u16(&data[entry_ps + 24..entry_ps + 26]) as u32;
+    let h = be_u16(&data[entry_ps + 26..entry_ps + 28]) as u32;
+    if w == 0 || h == 0 {
+        None
+    } else {
+        Some((w, h))
+    }
+}
+
 fn parse_stsd_and_codec(
     data: &[u8],
     ps: usize,
@@ -336,10 +371,18 @@ fn parse_stsd_and_codec(
     };
 
     let mut params = VideoCodecParams::new(codec);
+    if let Some((w, h)) = parse_visual_sample_entry_dimensions(data, entry_ps, entry_pe) {
+        params.coded_width = w;
+        params.coded_height = h;
+    }
 
     let mut nal_len_size: u8 = 4;
 
-    for child in iter_children(data, entry_ps, entry_pe) {
+    // Child boxes start after the VisualSampleEntry header.
+    let child_ps = entry_ps
+        .saturating_add(VISUAL_SAMPLE_ENTRY_HEADER_LEN)
+        .min(entry_pe);
+    for child in iter_children(data, child_ps, entry_pe) {
         let (h, cps, cpe) = child?;
         if codec == CodecType::H264 && &h.typ == b"avcC" {
             params.extradata = data[(cps - 8)..cpe].to_vec();
@@ -388,6 +431,14 @@ impl<'a> Mp4Demuxer<'a> {
             let handler = parse_hdlr_type(data, hdlr_ps, hdlr_pe)?;
             if &handler != b"vide" {
                 continue;
+            }
+
+            // Track ID from tkhd
+            let mut track_id: u32 = 0;
+            if let Some((tkhd_ps, tkhd_pe)) = find_child(data, trak_ps, trak_pe, b"tkhd")? {
+                if let Some(tid) = parse_tkhd_track_id(data, tkhd_ps, tkhd_pe)? {
+                    track_id = tid;
+                }
             }
 
             let Some((mdhd_ps, mdhd_pe)) = find_child(data, mdia_ps, mdia_pe, b"mdhd")? else {
@@ -455,11 +506,12 @@ impl<'a> Mp4Demuxer<'a> {
                     Vec::new() // empty means all samples are sync
                 };
 
-            params.coded_width = 0;
-            params.coded_height = 0;
-
             let track = Mp4Track {
-                id: 0,
+                id: if track_id != 0 {
+                    track_id
+                } else {
+                    all_tracks.len() as u32
+                },
                 params,
                 timescale,
                 sample_count,

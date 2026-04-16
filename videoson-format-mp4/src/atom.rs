@@ -81,7 +81,7 @@ pub fn iter_children<'a>(
                 let payload_start = pos + h.header_len;
                 let payload_end = atom_end;
                 let out = Ok((h, payload_start, payload_end));
-                pos = atom_end;
+                pos = payload_end;
                 Some(out)
             }
             Err(e) => Some(Err(e)),

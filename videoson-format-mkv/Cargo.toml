@@ -1,0 +1,16 @@
+[package]
+name = "videoson-format-mkv"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[features]
+default = ["std"]
+std = ["videoson-core/std", "videoson-common/std", "dep:matroska-demuxer"]
+
+[dependencies]
+videoson-core = { path = "../videoson-core", default-features = false }
+videoson-common = { path = "../videoson-common", default-features = false }
+
+matroska-demuxer = { version = "0.7", optional = true }

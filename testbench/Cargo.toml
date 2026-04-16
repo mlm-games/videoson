@@ -13,3 +13,6 @@ less-avc = "0.1.5"
 
 videoson-core = { path = "../videoson-core" }
 videoson-codec-h264 = { path = "../videoson-codec-h264" }
+videoson-format-mp4 = { path = "../videoson-format-mp4" }
+videoson-format-mkv = { path = "../videoson-format-mkv" }
+videoson-format-ivf = { path = "../videoson-format-ivf" }
