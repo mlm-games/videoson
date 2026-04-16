@@ -2,9 +2,6 @@
 
 A Rust video demux/decode workspace inspired by Symphonia.
 
-Part 1 currently contains:
-- videoson-core: public API traits/types
-- videoson-common: shared bitstream helpers
-- videoson: facade crate
+Decoding -> h264 only for now (all platforms),
 
-Codec crates are added in later parts.
+Demuxing -> mp4 for all platforms, mkv/webm for non-web
