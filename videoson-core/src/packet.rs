@@ -9,6 +9,7 @@ pub struct Packet {
     pub pts: Option<i64>,
     pub dts: Option<i64>,
     pub duration: Option<i64>,
+    pub is_sync: bool, // true if this is a keyframe/sync sample
     pub data: Vec<u8>,
 }
 
@@ -19,6 +20,7 @@ impl Packet {
             pts: None,
             dts: None,
             duration: None,
+            is_sync: false,
             data,
         }
     }

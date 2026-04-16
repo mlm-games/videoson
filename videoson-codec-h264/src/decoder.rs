@@ -6,12 +6,11 @@ use alloc::vec::Vec;
 
 use videoson_common::{annexb_nals, avcc_nals, ebsp_to_rbsp, BitstreamError, BitstreamResult};
 use videoson_core::{
-    CodecType, NalFormat, Packet, Result, VideoCodecParams, VideoDecoder, VideoDecoderOptions,
-    VideoFrame, VideosonError,
+    CodecType, NalFormat, Packet, PlaneData, Result, VideoCodecParams, VideoDecoder,
+    VideoDecoderOptions, VideoFrame, VideoFramePlanes, VideoPlane, VideosonError,
 };
 
 use crate::pps::Pps;
-use crate::slice::decode_idr_ipcm_slice;
 use crate::sps::Sps;
 
 pub(crate) struct ParamSets {
@@ -77,36 +76,235 @@ fn bs<T>(r: BitstreamResult<T>) -> Result<T> {
     r.map_err(map_bs_err)
 }
 
+#[derive(Debug, Clone)]
+pub(crate) enum PendingPlanes {
+    Mono8 {
+        y: Vec<u8>,
+    },
+    Yuv4208 {
+        y: Vec<u8>,
+        u: Vec<u8>,
+        v: Vec<u8>,
+    },
+    Mono16 {
+        y: Vec<u16>,
+    },
+    Yuv42016 {
+        y: Vec<u16>,
+        u: Vec<u16>,
+        v: Vec<u16>,
+    },
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct PendingPic {
+    pub(crate) frame_num: u32,
+    pub(crate) idr_pic_id: u32,
+    pub(crate) pic_order_cnt_lsb: u32,
+    pub(crate) width: u32,
+    pub(crate) height: u32,
+    pub(crate) bit_depth: u8,
+    pub(crate) chroma_format_idc: u32,
+    pub(crate) mbs_w: usize,
+    pub(crate) mbs_h: usize,
+    pub(crate) y_stride: usize,
+    pub(crate) chroma_w: usize,
+    pub(crate) chroma_h: usize,
+    pub(crate) uv_stride: usize,
+    pub(crate) planes: PendingPlanes,
+    pub(crate) mb_types: Vec<u8>,
+    pub(crate) filled: Vec<bool>,
+    pub(crate) filled_count: usize,
+}
+
+impl PendingPic {
+    pub(crate) fn new_from_sps(
+        sps: &Sps,
+        frame_num: u32,
+        idr_pic_id: u32,
+        pic_order_cnt_lsb: u32,
+    ) -> Result<Self> {
+        let (width, height) = sps.display_dimensions();
+        let width_us = width as usize;
+        let height_us = height as usize;
+
+        let bit_depth = sps.bit_depth_luma;
+        let chroma_format_idc = sps.chroma_format_idc;
+
+        if chroma_format_idc != 0 && chroma_format_idc != 1 {
+            return Err(VideosonError::Unsupported(
+                "only chroma_format_idc 0 (mono) and 1 (4:2:0) supported in M0",
+            ));
+        }
+
+        let mbs_w = sps.mbs_width() as usize;
+        let mbs_h = sps.mbs_height() as usize;
+        let total_mbs = mbs_w * mbs_h;
+
+        let y_stride = width_us;
+        let chroma_w = (width_us + 1) / 2;
+        let chroma_h = (height_us + 1) / 2;
+        let uv_stride = chroma_w;
+
+        let planes = if bit_depth <= 8 {
+            let y = vec![0u8; y_stride * height_us];
+            if chroma_format_idc == 0 {
+                PendingPlanes::Mono8 { y }
+            } else {
+                let u = vec![128u8; uv_stride * chroma_h];
+                let v = vec![128u8; uv_stride * chroma_h];
+                PendingPlanes::Yuv4208 { y, u, v }
+            }
+        } else {
+            let y = vec![0u16; y_stride * height_us];
+            if chroma_format_idc == 0 {
+                PendingPlanes::Mono16 { y }
+            } else {
+                let mid = 1u16 << (bit_depth - 1);
+                let u = vec![mid; uv_stride * chroma_h];
+                let v = vec![mid; uv_stride * chroma_h];
+                PendingPlanes::Yuv42016 { y, u, v }
+            }
+        };
+
+        Ok(Self {
+            frame_num,
+            idr_pic_id,
+            pic_order_cnt_lsb,
+            width,
+            height,
+            bit_depth,
+            chroma_format_idc,
+            mbs_w,
+            mbs_h,
+            y_stride,
+            chroma_w,
+            chroma_h,
+            uv_stride,
+            planes,
+            mb_types: vec![0u8; total_mbs],
+            filled: vec![false; total_mbs],
+            filled_count: 0,
+        })
+    }
+
+    #[inline]
+    pub(crate) fn total_mbs(&self) -> usize {
+        self.mbs_w * self.mbs_h
+    }
+
+    #[inline]
+    pub(crate) fn mark_mb_decoded(&mut self, mb_addr: usize, mb_type: u8) {
+        if mb_addr < self.mb_types.len() {
+            self.mb_types[mb_addr] = mb_type;
+            if !self.filled[mb_addr] {
+                self.filled[mb_addr] = true;
+                self.filled_count += 1;
+            }
+        }
+    }
+
+    #[inline]
+    pub(crate) fn neighbor_mb_type(&self, mb_addr: usize) -> Option<u8> {
+        if mb_addr >= self.mb_types.len() || !self.filled[mb_addr] {
+            None
+        } else {
+            Some(self.mb_types[mb_addr])
+        }
+    }
+
+    #[inline]
+    pub(crate) fn is_complete(&self) -> bool {
+        self.filled_count == self.total_mbs()
+    }
+
+    pub(crate) fn into_frame(self) -> VideoFrame {
+        match self.planes {
+            PendingPlanes::Mono8 { y } => VideoFrame {
+                width: self.width,
+                height: self.height,
+                planes: VideoFramePlanes::Mono,
+                pixfmt: videoson_core::PixelFormat::Gray,
+                bit_depth: self.bit_depth,
+                plane_data: vec![VideoPlane {
+                    stride: self.y_stride,
+                    data: PlaneData::U8(y),
+                }],
+            },
+            PendingPlanes::Yuv4208 { y, u, v } => VideoFrame {
+                width: self.width,
+                height: self.height,
+                planes: VideoFramePlanes::Yuv420,
+                pixfmt: videoson_core::PixelFormat::Yuv420,
+                bit_depth: self.bit_depth,
+                plane_data: vec![
+                    VideoPlane {
+                        stride: self.y_stride,
+                        data: PlaneData::U8(y),
+                    },
+                    VideoPlane {
+                        stride: self.uv_stride,
+                        data: PlaneData::U8(u),
+                    },
+                    VideoPlane {
+                        stride: self.uv_stride,
+                        data: PlaneData::U8(v),
+                    },
+                ],
+            },
+            PendingPlanes::Mono16 { y } => VideoFrame {
+                width: self.width,
+                height: self.height,
+                planes: VideoFramePlanes::Mono,
+                pixfmt: videoson_core::PixelFormat::Gray,
+                bit_depth: self.bit_depth,
+                plane_data: vec![VideoPlane {
+                    stride: self.y_stride,
+                    data: PlaneData::U16(y),
+                }],
+            },
+            PendingPlanes::Yuv42016 { y, u, v } => VideoFrame {
+                width: self.width,
+                height: self.height,
+                planes: VideoFramePlanes::Yuv420,
+                pixfmt: videoson_core::PixelFormat::Yuv420,
+                bit_depth: self.bit_depth,
+                plane_data: vec![
+                    VideoPlane {
+                        stride: self.y_stride,
+                        data: PlaneData::U16(y),
+                    },
+                    VideoPlane {
+                        stride: self.uv_stride,
+                        data: PlaneData::U16(u),
+                    },
+                    VideoPlane {
+                        stride: self.uv_stride,
+                        data: PlaneData::U16(v),
+                    },
+                ],
+            },
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct H264Decoder {
     params: VideoCodecParams,
     _opts: VideoDecoderOptions,
-
     nal_format: NalFormat,
-
     ps: ParamSets,
-
     rbsp_scratch: Vec<u8>,
     out: VecDeque<VideoFrame>,
+    pending: Option<PendingPic>,
 }
 
 impl H264Decoder {
-    fn iter_nals<'a>(
-        &'a self,
-        data: &'a [u8],
-    ) -> Box<dyn Iterator<Item = BitstreamResult<videoson_common::NalUnitRef<'a>>> + 'a> {
-        match self.nal_format {
-            NalFormat::AnnexB => Box::new(annexb_nals(data)),
-            NalFormat::Avcc { nal_len_size } => Box::new(avcc_nals(data, nal_len_size)),
-            _ => Box::new(core::iter::empty()),
-        }
-    }
-
     fn handle_nal(&mut self, n: videoson_common::NalUnitRef<'_>) -> Result<()> {
         let rbsp = ebsp_to_rbsp(n.payload_ebsp, &mut self.rbsp_scratch);
 
         match n.header.nal_unit_type {
-            6 => Ok(()), // SEI ignored
+            6 => Ok(()),
             7 => {
                 let sps = bs(crate::sps::parse_sps_rbsp(rbsp))?;
                 self.ps.put_sps(sps);
@@ -118,20 +316,72 @@ impl H264Decoder {
                 Ok(())
             }
             5 => {
-                let sh = bs(crate::slice::parse_slice_header_rbsp(rbsp, &self.ps))?;
-
+                let (sh, header_bits) = bs(crate::slice::parse_slice_header_rbsp(rbsp, &self.ps))?;
                 let pps = self.ps.get_pps(sh.pps_id)?;
+                let sps = self.ps.get_sps(pps.sps_id)?;
 
-                let frame = decode_idr_ipcm_slice(rbsp, &self.ps, &sh, pps)?;
-                self.out.push_back(frame);
+                let idr_pic_id = sh
+                    .idr_pic_id
+                    .ok_or(VideosonError::InvalidData("missing idr_pic_id"))?;
+                let poc = sh
+                    .pic_order_cnt_lsb
+                    .ok_or(VideosonError::InvalidData("missing pic_order_cnt_lsb"))?;
+
+                if let Some(p) = &self.pending {
+                    let same = p.frame_num == sh.frame_num
+                        && p.idr_pic_id == idr_pic_id
+                        && p.pic_order_cnt_lsb == poc;
+                    if !same {
+                        if p.is_complete() {
+                            let frame = self.pending.take().unwrap().into_frame();
+                            self.out.push_back(frame);
+                        } else {
+                            return Err(VideosonError::Unsupported(
+                                "new picture started before previous picture was complete",
+                            ));
+                        }
+                    }
+                }
+
+                if self.pending.is_none() {
+                    self.pending = Some(PendingPic::new_from_sps(
+                        sps,
+                        sh.frame_num,
+                        idr_pic_id,
+                        poc,
+                    )?);
+                }
+
+                {
+                    let pic = self.pending.as_mut().unwrap();
+                    crate::slice::decode_idr_ipcm_slice_into_pic(
+                        rbsp,
+                        header_bits,
+                        &self.ps,
+                        &sh,
+                        pps,
+                        pic,
+                    )?;
+                }
+
+                if self
+                    .pending
+                    .as_ref()
+                    .map(|p| p.is_complete())
+                    .unwrap_or(false)
+                {
+                    let frame = self.pending.take().unwrap().into_frame();
+                    self.out.push_back(frame);
+                }
+
                 Ok(())
             }
             1 => Err(VideosonError::Unsupported(
                 "non-IDR slice not supported in M0",
             )),
-            9 => Ok(()),            // AUD ignored
-            10 | 11 | 12 => Ok(()), // EOS/filler ignored
-            _ => Ok(()),            // other NAL types ignored
+            9 => Ok(()),
+            10 | 11 | 12 => Ok(()),
+            _ => Ok(()),
         }
     }
 }
@@ -151,6 +401,7 @@ impl VideoDecoder for H264Decoder {
             ps: ParamSets::new(),
             rbsp_scratch: Vec::new(),
             out: VecDeque::new(),
+            pending: None,
         })
     }
 
@@ -195,5 +446,6 @@ impl VideoDecoder for H264Decoder {
         self.ps = ParamSets::new();
         self.rbsp_scratch.clear();
         self.out.clear();
+        self.pending = None;
     }
 }

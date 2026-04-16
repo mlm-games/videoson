@@ -5,8 +5,8 @@ use videoson_core::{Result, VideosonError};
 
 #[derive(Debug, Clone, Copy)]
 pub struct CtxState {
-    pub p_state_idx: u8, // 0..63
-    pub val_mps: u8,     // 0 or 1
+    pub p_state_idx: u8,
+    pub val_mps: u8,
 }
 
 const RANGE_TAB_LPS: [[u16; 4]; 64] = [
@@ -128,10 +128,9 @@ pub fn init_ctx_i_slice_0_10(slice_qpy: i32) -> [CtxState; 11] {
 pub struct CabacDecoder<'a> {
     cod_i_range: u16,
     cod_i_offset: u16,
-
     data: &'a [u8],
     byte: usize,
-    bit: u8, // 0..7
+    bit: u8,
 }
 
 impl<'a> CabacDecoder<'a> {
@@ -146,12 +145,7 @@ impl<'a> CabacDecoder<'a> {
             byte: 0,
             bit: 0,
         };
-        // read 9 bits MSB-first
-        let mut off: u16 = 0;
-        for _ in 0..9 {
-            off = (off << 1) | d.read_bit();
-        }
-        d.cod_i_offset = off;
+        d.reinit_engine()?;
         Ok(d)
     }
 
@@ -174,6 +168,31 @@ impl<'a> CabacDecoder<'a> {
         self.byte * 8 + (self.bit as usize)
     }
 
+    #[inline]
+    pub fn bit_pos(&self) -> usize {
+        self.bits_read()
+    }
+
+    pub fn set_bit_pos(&mut self, bit_pos: usize) -> Result<()> {
+        if bit_pos > self.data.len() * 8 {
+            return Err(VideosonError::NeedMoreData);
+        }
+        self.byte = bit_pos >> 3;
+        self.bit = (bit_pos & 7) as u8;
+        Ok(())
+    }
+
+    pub fn reinit_engine(&mut self) -> Result<()> {
+        self.cod_i_range = 510;
+        self.cod_i_offset = 0;
+        let mut off: u16 = 0;
+        for _ in 0..9 {
+            off = (off << 1) | self.read_bit();
+        }
+        self.cod_i_offset = off;
+        Ok(())
+    }
+
     fn renormalize(&mut self) {
         while self.cod_i_range < 256 {
             self.cod_i_range <<= 1;
@@ -189,21 +208,17 @@ impl<'a> CabacDecoder<'a> {
 
         let bin_val: u8;
         if self.cod_i_offset >= self.cod_i_range {
-            // LPS
             bin_val = 1 - ctx.val_mps;
             self.cod_i_offset -= self.cod_i_range;
             self.cod_i_range = cod_i_range_lps;
-
             if ctx.p_state_idx == 0 {
                 ctx.val_mps = 1 - ctx.val_mps;
             }
             ctx.p_state_idx = TRANS_IDX_LPS[ctx.p_state_idx as usize];
         } else {
-            // MPS
             bin_val = ctx.val_mps;
             ctx.p_state_idx = TRANS_IDX_MPS[ctx.p_state_idx as usize];
         }
-
         self.renormalize();
         bin_val
     }
@@ -215,6 +230,11 @@ impl<'a> CabacDecoder<'a> {
         }
         self.renormalize();
         0
+    }
+
+    #[inline]
+    pub fn decode_end_of_slice_flag(&mut self) -> bool {
+        self.decode_terminate() != 0
     }
 }
 
@@ -249,10 +269,10 @@ pub fn decode_mb_type_intra(
         return MB_TYPE_I_PCM;
     }
 
-    let bin1 = cabac.decode_decision(&mut ctx0_10[6]); // cbp_luma
-    let bin2 = cabac.decode_decision(&mut ctx0_10[7]); // cbp_chroma bit0
+    let bin1 = cabac.decode_decision(&mut ctx0_10[6]);
+    let bin2 = cabac.decode_decision(&mut ctx0_10[7]);
     let cbp_chroma = if bin2 == 1 {
-        let bin3 = cabac.decode_decision(&mut ctx0_10[8]); // cbp_chroma bit1
+        let bin3 = cabac.decode_decision(&mut ctx0_10[8]);
         if bin3 == 1 {
             2
         } else {

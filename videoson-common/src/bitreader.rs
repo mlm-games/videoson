@@ -30,6 +30,38 @@ impl<'a> BitReader<'a> {
     }
 
     #[inline]
+    fn peek_bit_at(&self, bit_pos: usize) -> BitstreamResult<bool> {
+        if bit_pos >= self.buf.len() * 8 {
+            return Err(BitstreamError::Eof);
+        }
+        let byte = self.buf[bit_pos >> 3];
+        let shift = 7 - (bit_pos & 7);
+        Ok(((byte >> shift) & 1) != 0)
+    }
+
+    pub fn more_rbsp_data(&self) -> BitstreamResult<bool> {
+        let rem = self.bits_remaining();
+        if rem == 0 {
+            return Ok(false);
+        }
+
+        if rem > 8 {
+            return Ok(true);
+        }
+
+        let first = self.peek_bit_at(self.bit_pos)?;
+        if !first {
+            return Ok(true);
+        }
+        for i in 1..rem {
+            if self.peek_bit_at(self.bit_pos + i)? {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
+    #[inline]
     pub fn read_bit(&mut self) -> BitstreamResult<bool> {
         if self.bit_pos >= self.buf.len() * 8 {
             return Err(BitstreamError::Eof);

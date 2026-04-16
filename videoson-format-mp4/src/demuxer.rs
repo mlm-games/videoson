@@ -23,13 +23,14 @@ struct SampleIndex {
     dts: Vec<i64>,
     pts: Vec<i64>,
     dur: Vec<i64>,
+    sync_samples: Vec<u32>, // 1-based sample numbers that are sync (keyframes)
 }
 
 pub struct Mp4Demuxer<'a> {
     data: &'a [u8],
-    track: Mp4Track,
-    idx: SampleIndex,
-    cur: usize,
+    tracks: Vec<Mp4Track>,
+    indices: Vec<SampleIndex>,
+    curs: Vec<usize>, // current sample index for each track
 }
 
 fn be_u16(b: &[u8]) -> u16 {
@@ -111,6 +112,29 @@ fn parse_stsz(data: &[u8], ps: usize, pe: usize) -> Result<Vec<u32>, VideosonErr
         p += 4;
     }
     Ok(sizes)
+}
+
+fn parse_stss(data: &[u8], ps: usize, pe: usize) -> Result<Vec<u32>, VideosonError> {
+    if pe - ps < 8 {
+        return Err(VideosonError::InvalidData("mp4: stss too short"));
+    }
+    let mut p = ps + 4; // skip fullbox version/flags
+    let count = be_u32(&data[p..p + 4]) as usize;
+    p += 4;
+
+    if count == 0 {
+        return Ok(Vec::new());
+    }
+
+    if pe - p < count * 4 {
+        return Err(VideosonError::InvalidData("mp4: stss table too short"));
+    }
+    let mut entries = Vec::with_capacity(count);
+    for _ in 0..count {
+        entries.push(be_u32(&data[p..p + 4]));
+        p += 4;
+    }
+    Ok(entries)
 }
 
 fn parse_stco_u32(data: &[u8], ps: usize, pe: usize) -> Result<Vec<u64>, VideosonError> {
@@ -346,7 +370,7 @@ impl<'a> Mp4Demuxer<'a> {
             found.ok_or(VideosonError::InvalidData("mp4: missing moov"))?
         };
 
-        let mut chosen: Option<(Mp4Track, SampleIndex)> = None;
+        let mut all_tracks: Vec<(Mp4Track, SampleIndex)> = Vec::new();
 
         for trak in iter_children(data, moov_ps, moov_pe) {
             let (h, trak_ps, trak_pe) = trak?;
@@ -422,6 +446,15 @@ impl<'a> Mp4Demuxer<'a> {
                 pts.push(dts[i] + off);
             }
 
+            // Parse stss (sync sample table)
+            // If absent, all samples are sync (keyframes)
+            let sync_entries =
+                if let Some((stss_ps, stss_pe)) = find_child(data, stbl_ps, stbl_pe, b"stss")? {
+                    parse_stss(data, stss_ps, stss_pe)?
+                } else {
+                    Vec::new() // empty means all samples are sync
+                };
+
             params.coded_width = 0;
             params.coded_height = 0;
 
@@ -437,45 +470,78 @@ impl<'a> Mp4Demuxer<'a> {
                 dts,
                 pts,
                 dur,
+                sync_samples: sync_entries,
             };
 
-            chosen = Some((track, idx));
-            break;
+            all_tracks.push((track, idx));
         }
 
-        let (track, idx) = chosen.ok_or(VideosonError::InvalidData("mp4: no video track found"))?;
+        if all_tracks.is_empty() {
+            return Err(VideosonError::InvalidData("mp4: no video track found"));
+        }
+
+        let tracks: Vec<_> = all_tracks.iter().map(|(t, _)| t.clone()).collect();
+        let indices: Vec<_> = all_tracks.iter().map(|(_, i)| i.clone()).collect();
+        let curs: Vec<usize> = vec![0; tracks.len()];
 
         Ok(Self {
             data,
-            track,
-            idx,
-            cur: 0,
+            tracks,
+            indices,
+            curs,
         })
     }
 
+    pub fn track_count(&self) -> usize {
+        self.tracks.len()
+    }
+
     pub fn tracks(&self) -> &[Mp4Track] {
-        core::slice::from_ref(&self.track)
+        &self.tracks
     }
 
     pub fn next_packet(&mut self) -> Result<Option<Packet>, VideosonError> {
-        if self.cur >= self.track.sample_count {
-            return Ok(None);
+        // Find the track with the earliest next sample (by DTS)
+        let mut best_track = None;
+        let mut best_dts: i64 = i64::MAX;
+
+        for (track_idx, cur) in self.curs.iter().enumerate() {
+            if *cur >= self.tracks[track_idx].sample_count {
+                continue;
+            }
+            let dts = self.indices[track_idx].dts[*cur];
+            if dts < best_dts {
+                best_dts = dts;
+                best_track = Some(track_idx);
+            }
         }
 
-        let i = self.cur;
-        self.cur += 1;
+        let track_idx = best_track.ok_or(VideosonError::InvalidData(
+            "mp4: no tracks have more samples",
+        ))?;
 
-        let off = self.idx.offsets[i] as usize;
-        let sz = self.idx.sizes[i] as usize;
+        let i = self.curs[track_idx];
+        self.curs[track_idx] += 1;
+
+        let off = self.indices[track_idx].offsets[i] as usize;
+        let sz = self.indices[track_idx].sizes[i] as usize;
 
         if off + sz > self.data.len() {
             return Err(VideosonError::InvalidData("mp4: sample out of range"));
         }
 
-        let mut pkt = Packet::new(self.track.id, self.data[off..off + sz].to_vec());
-        pkt.dts = Some(self.idx.dts[i]);
-        pkt.pts = Some(self.idx.pts[i]);
-        pkt.duration = Some(self.idx.dur[i]);
+        let sample_num = (i + 1) as u32;
+        let is_sync = if self.indices[track_idx].sync_samples.is_empty() {
+            true
+        } else {
+            self.indices[track_idx].sync_samples.contains(&sample_num)
+        };
+
+        let mut pkt = Packet::new(self.tracks[track_idx].id, self.data[off..off + sz].to_vec());
+        pkt.dts = Some(self.indices[track_idx].dts[i]);
+        pkt.pts = Some(self.indices[track_idx].pts[i]);
+        pkt.duration = Some(self.indices[track_idx].dur[i]);
+        pkt.is_sync = is_sync;
         Ok(Some(pkt))
     }
 }
