@@ -115,6 +115,11 @@ pub(crate) struct PendingPic {
     pub(crate) mb_types: Vec<u8>,
     pub(crate) filled: Vec<bool>,
     pub(crate) filled_count: usize,
+    pub(crate) intra4x4_modes: Vec<u8>,
+    pub(crate) nz_y: Vec<u8>,
+    pub(crate) nz_u: Vec<u8>,
+    pub(crate) nz_v: Vec<u8>,
+    pub(crate) nz_y_dc: Vec<u8>,
 }
 
 impl PendingPic {
@@ -185,6 +190,11 @@ impl PendingPic {
             mb_types: vec![0u8; total_mbs],
             filled: vec![false; total_mbs],
             filled_count: 0,
+            intra4x4_modes: vec![2u8; total_mbs * 16],
+            nz_y: vec![0u8; total_mbs * 16],
+            nz_u: vec![0u8; total_mbs * 4],
+            nz_v: vec![0u8; total_mbs * 4],
+            nz_y_dc: vec![0u8; total_mbs],
         })
     }
 
@@ -211,6 +221,16 @@ impl PendingPic {
         } else {
             Some(self.mb_types[mb_addr])
         }
+    }
+
+    #[inline]
+    pub(crate) fn idx_y4(&self, mb_addr: usize, blk: usize) -> usize {
+        mb_addr * 16 + blk
+    }
+
+    #[inline]
+    pub(crate) fn idx_c4(&self, mb_addr: usize, blk: usize) -> usize {
+        mb_addr * 4 + blk
     }
 
     #[inline]
@@ -354,7 +374,7 @@ impl H264Decoder {
 
                 {
                     let pic = self.pending.as_mut().unwrap();
-                    crate::slice::decode_idr_ipcm_slice_into_pic(
+                    crate::slice::decode_idr_slice_into_pic(
                         rbsp,
                         header_bits,
                         &self.ps,

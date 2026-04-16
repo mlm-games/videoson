@@ -4,14 +4,12 @@
 extern crate alloc;
 
 mod cabac;
+mod cavlc;
 mod decoder;
+mod intra_pred;
 mod pps;
 mod slice;
 mod sps;
+mod transform;
 
 pub use decoder::H264Decoder;
-
-#[cfg(feature = "backend-rust-h264")]
-mod rust_h264_decoder;
-#[cfg(feature = "backend-rust-h264")]
-pub use rust_h264_decoder::RustH264Decoder;

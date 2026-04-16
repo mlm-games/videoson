@@ -9,6 +9,7 @@ pub struct Pps {
     pub entropy_coding_mode_flag: bool,
 
     pub pic_init_qp_minus26: i32,
+    pub chroma_qp_index_offset: i32,
 }
 
 pub fn parse_pps_rbsp(rbsp: &[u8]) -> BitstreamResult<Pps> {
@@ -33,7 +34,7 @@ pub fn parse_pps_rbsp(rbsp: &[u8]) -> BitstreamResult<Pps> {
 
     let pic_init_qp_minus26 = read_se(&mut br)?;
     let _pic_init_qs_minus26 = read_se(&mut br)?;
-    let _chroma_qp_index_offset = read_se(&mut br)?;
+    let chroma_qp_index_offset = read_se(&mut br)?;
 
     let _deblocking_filter_control_present_flag = br.read_bit()?;
     let _constrained_intra_pred_flag = br.read_bit()?;
@@ -44,5 +45,6 @@ pub fn parse_pps_rbsp(rbsp: &[u8]) -> BitstreamResult<Pps> {
         sps_id,
         entropy_coding_mode_flag,
         pic_init_qp_minus26,
+        chroma_qp_index_offset,
     })
 }
