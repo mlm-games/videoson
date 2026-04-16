@@ -401,6 +401,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "rust_h264"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "851af7d2d80f2f15451499f29a1ff753bef71d15010880a04cbcfa1f415e8914"
+
+[[package]]
 name = "rustversion"
 version = "1.0.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -608,6 +614,7 @@ dependencies = [
 name = "videoson-codec-h264"
 version = "0.1.0"
 dependencies = [
+ "rust_h264",
  "videoson-common",
  "videoson-core",
 ]

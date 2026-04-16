@@ -10,3 +10,8 @@ mod slice;
 mod sps;
 
 pub use decoder::H264Decoder;
+
+#[cfg(feature = "backend-rust-h264")]
+mod rust_h264_decoder;
+#[cfg(feature = "backend-rust-h264")]
+pub use rust_h264_decoder::RustH264Decoder;

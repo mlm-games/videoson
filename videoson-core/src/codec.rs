@@ -69,7 +69,8 @@ impl Default for VideoDecoderOptions {
     }
 }
 
-pub trait VideoDecoder: Send {
+// NOTE: Removed `: Send` to support wasm-friendly decoders that are !Send.
+pub trait VideoDecoder {
     fn try_new(params: &VideoCodecParams, opts: &VideoDecoderOptions) -> Result<Self>
     where
         Self: Sized;

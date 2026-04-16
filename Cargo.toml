@@ -20,3 +20,4 @@ rust-version = "1.79"
 [workspace.dependencies]
 videoson-core = { path = "videoson-core", version = "0.0.0" }
 videoson-common = { path = "videoson-common", version = "0.0.0" }
+rust_h264 = { version = "0.3.0" }
