@@ -1,4 +1,3 @@
-// videoson/videoson/src/lib.rs
 #![cfg_attr(not(feature = "std"), no_std)]
 
 pub use videoson_core::{

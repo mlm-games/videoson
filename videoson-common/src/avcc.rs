@@ -1,4 +1,3 @@
-// videoson/videoson-common/src/avcc.rs
 use crate::{BitstreamError, BitstreamResult, NalHeader, NalUnitRef};
 
 #[derive(Debug, Clone, Copy)]

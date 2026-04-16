@@ -1,4 +1,3 @@
-// videoson/videoson-common/src/annexb.rs
 use crate::{BitstreamError, BitstreamResult};
 
 #[derive(Debug, Clone, Copy)]

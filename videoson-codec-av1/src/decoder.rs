@@ -1,5 +1,3 @@
-// videoson-codec-av1/src/decoder.rs
-
 use videoson_core::{
     CodecType, Packet, Result, VideoCodecParams, VideoDecoder, VideoDecoderOptions, VideoFrame,
     VideosonError,

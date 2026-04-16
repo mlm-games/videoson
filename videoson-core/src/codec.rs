@@ -1,4 +1,3 @@
-// videoson/videoson-core/src/codec.rs
 extern crate alloc;
 
 use alloc::vec::Vec;
@@ -69,7 +68,7 @@ impl Default for VideoDecoderOptions {
     }
 }
 
-// NOTE: Removed `: Send` to support wasm-friendly decoders that are !Send.
+// NOTE - Removed `: Send` to support wasm
 pub trait VideoDecoder {
     fn try_new(params: &VideoCodecParams, opts: &VideoDecoderOptions) -> Result<Self>
     where

@@ -1,5 +1,3 @@
-// videoson-format-ivf/src/demuxer.rs
-
 use alloc::vec::Vec;
 
 use videoson_core::Packet;

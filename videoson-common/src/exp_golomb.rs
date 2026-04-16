@@ -1,4 +1,3 @@
-// videoson/videoson-common/src/exp_golomb.rs
 use crate::{BitReader, BitstreamError, BitstreamResult};
 
 pub fn read_ue(br: &mut BitReader<'_>) -> BitstreamResult<u32> {

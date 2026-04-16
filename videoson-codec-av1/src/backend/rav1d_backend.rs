@@ -1,4 +1,3 @@
-// videoson-codec-av1/src/backend/rav1d_backend.rs
 extern crate alloc;
 
 use alloc::collections::VecDeque;

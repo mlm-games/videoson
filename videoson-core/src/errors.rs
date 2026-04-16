@@ -1,4 +1,3 @@
-// videoson/videoson-core/src/errors.rs
 extern crate alloc;
 
 use alloc::string::String;

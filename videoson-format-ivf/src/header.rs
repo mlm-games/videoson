@@ -1,5 +1,3 @@
-// videoson-format-ivf/src/header.rs
-
 pub const IVF_SIGNATURE: &[u8; 4] = b"DKIF";
 pub const IVF_FILE_HEADER_LEN: usize = 32;
 pub const IVF_FRAME_HEADER_LEN: usize = 12;

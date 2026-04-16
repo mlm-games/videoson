@@ -1,5 +1,3 @@
-// videoson-core/src/units.rs
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TimeBase {
     pub num: u32,

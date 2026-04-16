@@ -1,10 +1,3 @@
-// videoson-codec-h264/src/rust_h264_decoder.rs
-//
-// Full H.264 decoding backend (pure Rust) using the `rust_h264` crate.
-// - Works for CABAC + CAVLC, regular I-slices (I4x4/I16x16), P/B frames, etc.
-// - Accepts AnnexB or AVCC packets.
-// - Can prime the decoder using MP4 `avcC` extradata.
-//
 // Output: videoson_core::VideoFrame (YUV420, 8-bit, tightly packed, stride == width).
 
 extern crate alloc;

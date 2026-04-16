@@ -1,4 +1,3 @@
-// videoson/videoson-common/src/rbsp.rs
 extern crate alloc;
 
 use alloc::vec::Vec;

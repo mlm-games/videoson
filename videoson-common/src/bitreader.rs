@@ -1,4 +1,3 @@
-// videoson/videoson-common/src/bitreader.rs
 use crate::{BitstreamError, BitstreamResult};
 
 pub struct BitReader<'a> {
