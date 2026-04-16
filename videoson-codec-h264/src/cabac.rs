@@ -236,6 +236,27 @@ impl<'a> CabacDecoder<'a> {
     pub fn decode_end_of_slice_flag(&mut self) -> bool {
         self.decode_terminate() != 0
     }
+
+    #[inline]
+    pub fn decode_bypass(&mut self) -> u8 {
+        self.cod_i_offset <<= 1;
+        self.cod_i_offset |= self.read_bit();
+        if self.cod_i_offset >= self.cod_i_range {
+            self.cod_i_offset -= self.cod_i_range;
+            1
+        } else {
+            0
+        }
+    }
+
+    #[inline]
+    pub fn decode_bypass_bits(&mut self, n: u32) -> u32 {
+        let mut v = 0u32;
+        for _ in 0..n {
+            v = (v << 1) | (self.decode_bypass() as u32);
+        }
+        v
+    }
 }
 
 pub fn decode_mb_type_intra(

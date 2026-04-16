@@ -11,7 +11,9 @@ use crate::cavlc::{residual_block_cavlc, CoeffBlock};
 use crate::decoder::{ParamSets, PendingPic, PendingPlanes};
 use crate::intra_pred::{pred_chroma_8x8, pred_luma_16x16, pred_luma_4x4, Ref4x4};
 use crate::pps::Pps;
-use crate::transform::{clip_u8, dequant_4x4, inv_hadamard_2x2, inv_hadamard_4x4, inv_transform_4x4};
+use crate::transform::{
+    clip_u8, dequant_4x4, inv_hadamard_2x2, inv_hadamard_4x4, inv_transform_4x4,
+};
 
 #[derive(Debug, Clone)]
 pub struct SliceHeader {
@@ -32,7 +34,10 @@ fn is_i_slice(slice_type: u32) -> bool {
 }
 
 /// Returns (SliceHeader, header_bits_consumed)
-pub fn parse_slice_header_rbsp(rbsp: &[u8], ps: &ParamSets) -> BitstreamResult<(SliceHeader, usize)> {
+pub fn parse_slice_header_rbsp(
+    rbsp: &[u8],
+    ps: &ParamSets,
+) -> BitstreamResult<(SliceHeader, usize)> {
     let mut br = BitReader::new(rbsp);
 
     let first_mb_in_slice = read_ue(&mut br)?;
@@ -59,7 +64,9 @@ pub fn parse_slice_header_rbsp(rbsp: &[u8], ps: &ParamSets) -> BitstreamResult<(
         let n = sps.pic_order_cnt_lsb_bits();
         Some(br.read_bits_u32(n)?)
     } else {
-        return Err(BitstreamError::Invalid("pic_order_cnt_type != 0 not supported"));
+        return Err(BitstreamError::Invalid(
+            "pic_order_cnt_type != 0 not supported",
+        ));
     };
 
     let _no_output_of_prior_pics_flag = br.read_bit()?;
@@ -195,11 +202,25 @@ fn refs_8x8_chroma(
 
     let mut top = [128u8; 8];
     for i in 0..8 {
-        top[i] = get_chroma_u8(plane, stride, pic.chroma_w, pic.chroma_h, x0 + i as i32, y0 - 1);
+        top[i] = get_chroma_u8(
+            plane,
+            stride,
+            pic.chroma_w,
+            pic.chroma_h,
+            x0 + i as i32,
+            y0 - 1,
+        );
     }
     let mut left = [128u8; 8];
     for i in 0..8 {
-        left[i] = get_chroma_u8(plane, stride, pic.chroma_w, pic.chroma_h, x0 - 1, y0 + i as i32);
+        left[i] = get_chroma_u8(
+            plane,
+            stride,
+            pic.chroma_w,
+            pic.chroma_h,
+            x0 - 1,
+            y0 + i as i32,
+        );
     }
     (top, left, tl)
 }
@@ -224,7 +245,15 @@ fn inv_residual_from_coeff_scan(coeff_scan_full: [i32; 16], qp: i32) -> [i32; 16
     inv_transform_4x4(dq)
 }
 
-fn write_4x4(dst: &mut [u8], stride: usize, w: usize, h: usize, x0: usize, y0: usize, blk: &[u8; 16]) {
+fn write_4x4(
+    dst: &mut [u8],
+    stride: usize,
+    w: usize,
+    h: usize,
+    x0: usize,
+    y0: usize,
+    blk: &[u8; 16],
+) {
     for y in 0..4 {
         for x in 0..4 {
             let xx = x0 + x;
@@ -555,7 +584,13 @@ fn coded_top_chroma_dc(pic: &PendingPic, mb_addr: usize, mb_y: usize, is_u: bool
     }
 }
 
-fn coded_left_chroma_ac(pic: &PendingPic, mb_addr: usize, mb_x: usize, blk: usize, nz: &[u8]) -> bool {
+fn coded_left_chroma_ac(
+    pic: &PendingPic,
+    mb_addr: usize,
+    mb_x: usize,
+    blk: usize,
+    nz: &[u8],
+) -> bool {
     let bx = blk % 2;
     let by = blk / 2;
     if bx > 0 {
@@ -572,7 +607,13 @@ fn coded_left_chroma_ac(pic: &PendingPic, mb_addr: usize, mb_x: usize, blk: usiz
     }
 }
 
-fn coded_top_chroma_ac(pic: &PendingPic, mb_addr: usize, mb_y: usize, blk: usize, nz: &[u8]) -> bool {
+fn coded_top_chroma_ac(
+    pic: &PendingPic,
+    mb_addr: usize,
+    mb_y: usize,
+    blk: usize,
+    nz: &[u8],
+) -> bool {
     let bx = blk % 2;
     let by = blk / 2;
     if by > 0 {
@@ -607,7 +648,9 @@ pub fn decode_idr_slice_into_pic(
         return Err(VideosonError::Unsupported("Part4a: only 8-bit supported"));
     }
     if pic.chroma_format_idc != 0 && pic.chroma_format_idc != 1 {
-        return Err(VideosonError::Unsupported("Part4a: only mono and 4:2:0 supported"));
+        return Err(VideosonError::Unsupported(
+            "Part4a: only mono and 4:2:0 supported",
+        ));
     }
 
     let mut br = BitReader::new(rbsp);
@@ -705,7 +748,11 @@ pub fn decode_idr_slice_into_pic(
                         mpm
                     } else {
                         let rem = br.read_bits_u32(3).map_err(map_bs)? as u8;
-                        if rem < mpm { rem } else { rem + 1 }
+                        if rem < mpm {
+                            rem
+                        } else {
+                            rem + 1
+                        }
                     };
                     pic.intra4x4_modes[pic.idx_y4(mb_addr, blk)] = mode;
                 }
@@ -718,7 +765,9 @@ pub fn decode_idr_slice_into_pic(
 
                 let cbp_code = read_ue(&mut br).map_err(map_bs)? as usize;
                 if cbp_code > 47 {
-                    return Err(VideosonError::InvalidData("coded_block_pattern out of range"));
+                    return Err(VideosonError::InvalidData(
+                        "coded_block_pattern out of range",
+                    ));
                 }
                 let cbp = INTRA_GOLOMB_TO_CBP[cbp_code] as u32;
                 let cbp_luma = cbp & 0x0F;
@@ -730,8 +779,10 @@ pub fn decode_idr_slice_into_pic(
                 }
 
                 // luma blocks
-                let PendingPlanes::Yuv4208 { y, u, v } | PendingPlanes::Mono8 { y } = &mut pic.planes else {
-                    return Err(VideosonError::InvalidData("plane mismatch"));
+                let y = match &mut pic.planes {
+                    PendingPlanes::Yuv4208 { y, .. } => y,
+                    PendingPlanes::Mono8 { y } => y,
+                    _ => return Err(VideosonError::InvalidData("plane mismatch")),
                 };
 
                 let y_w = pic.width as usize;
@@ -793,8 +844,24 @@ pub fn decode_idr_slice_into_pic(
                                 let x0 = mb_x * 8 + bx * 4;
                                 let y0 = mb_y * 8 + by * 4;
 
-                                write_4x4(u, pic.uv_stride, pic.chroma_w, pic.chroma_h, x0, y0, &pred4u);
-                                write_4x4(v, pic.uv_stride, pic.chroma_w, pic.chroma_h, x0, y0, &pred4v);
+                                write_4x4(
+                                    u,
+                                    pic.uv_stride,
+                                    pic.chroma_w,
+                                    pic.chroma_h,
+                                    x0,
+                                    y0,
+                                    &pred4u,
+                                );
+                                write_4x4(
+                                    v,
+                                    pic.uv_stride,
+                                    pic.chroma_w,
+                                    pic.chroma_h,
+                                    x0,
+                                    y0,
+                                    &pred4v,
+                                );
 
                                 pic.nz_u[pic.idx_c4(mb_addr, blk)] = 0;
                                 pic.nz_v[pic.idx_c4(mb_addr, blk)] = 0;
@@ -820,14 +887,27 @@ pub fn decode_idr_slice_into_pic(
                             for bx in 0..2 {
                                 let blk = by * 2 + bx;
                                 let (u_ac, v_ac) = if cbp_chroma == 2 {
-                                    let ncu = cavlc_nc_chroma(pic, mb_addr, mb_x, mb_y, blk, &pic.nz_u);
-                                    let ncv = cavlc_nc_chroma(pic, mb_addr, mb_x, mb_y, blk, &pic.nz_v);
+                                    let ncu =
+                                        cavlc_nc_chroma(pic, mb_addr, mb_x, mb_y, blk, &pic.nz_u);
+                                    let ncv =
+                                        cavlc_nc_chroma(pic, mb_addr, mb_x, mb_y, blk, &pic.nz_v);
                                     (
                                         residual_block_cavlc(&mut br, ncu, 15).map_err(map_bs)?,
                                         residual_block_cavlc(&mut br, ncv, 15).map_err(map_bs)?,
                                     )
                                 } else {
-                                    CoeffBlock { levels_scan: [0; 16], max_coeff: 15, total_coeff: 0 }
+                                    (
+                                        CoeffBlock {
+                                            levels_scan: [0; 16],
+                                            max_coeff: 15,
+                                            total_coeff: 0,
+                                        },
+                                        CoeffBlock {
+                                            levels_scan: [0; 16],
+                                            max_coeff: 15,
+                                            total_coeff: 0,
+                                        },
+                                    )
                                 };
 
                                 pic.nz_u[pic.idx_c4(mb_addr, blk)] = u_ac.total_coeff as u8;
@@ -853,193 +933,26 @@ pub fn decode_idr_slice_into_pic(
                                 let x0 = mb_x * 8 + bx * 4;
                                 let y0 = mb_y * 8 + by * 4;
 
-                                write_4x4_pred_plus_res(u, pic.uv_stride, pic.chroma_w, pic.chroma_h, x0, y0, pred4u, res_u);
-                                write_4x4_pred_plus_res(v, pic.uv_stride, pic.chroma_w, pic.chroma_h, x0, y0, pred4v, res_v);
-                            }
-                        }
-                    }
-                }
-
-                pic.mark_mb_decoded(mb_addr, 0);
-                mb_addr += 1;
-                continue;
-            }
-
-            // mb_type 1..24 => Intra16x16 (as in Part 3, unchanged logic)
-            if (1..=24).contains(&mb_type) {
-                let mbt = (mb_type - 1) as u32;
-                let intra16_mode = (mbt % 4) as u8;
-                let cbp_chroma = ((mbt / 4) % 3) as u32;
-                let cbp_luma = if mb_type <= 12 { 0u32 } else { 15u32 };
-
-                let intra_chroma_pred_mode = if pic.chroma_format_idc == 1 {
-                    read_ue(&mut br).map_err(map_bs)? as u8
-                } else {
-                    0
-                };
-
-                if cbp_luma != 0 || cbp_chroma != 0 {
-                    let mb_qp_delta = read_se(&mut br).map_err(map_bs)?;
-                    qp_y = clip_qp(qp_y + mb_qp_delta);
-                }
-
-                let pred16 = {
-                    let (top, left, tl) = refs_16x16_luma(pic, mb_x, mb_y);
-                    pred_luma_16x16(intra16_mode, top, left, tl)
-                };
-
-                let PendingPlanes::Yuv4208 { y, u, v } | PendingPlanes::Mono8 { y } = &mut pic.planes else {
-                    return Err(VideosonError::InvalidData("plane mismatch"));
-                };
-
-                let y_w = pic.width as usize;
-                let y_h = pic.height as usize;
-
-                if cbp_luma == 0 {
-                    for by in 0..4 {
-                        for bx in 0..4 {
-                            let pred4 = pred4_from_pred16(&pred16, bx, by);
-                            let x0 = mb_x * 16 + bx * 4;
-                            let y0 = mb_y * 16 + by * 4;
-                            write_4x4(y, pic.y_stride, y_w, y_h, x0, y0, &pred4);
-                            pic.nz_y[pic.idx_y4(mb_addr, by * 4 + bx)] = 0;
-                        }
-                    }
-                    pic.nz_y_dc[mb_addr] = 0;
-                } else {
-                    let n_c_dc = {
-                        let left = if mb_x > 0 && pic.filled[mb_addr - 1] {
-                            pic.nz_y_dc[mb_addr - 1] as i32
-                        } else {
-                            -1
-                        };
-                        let top = if mb_y > 0 && pic.filled[mb_addr - pic.mbs_w] {
-                            pic.nz_y_dc[mb_addr - pic.mbs_w] as i32
-                        } else {
-                            -1
-                        };
-                        match (left >= 0, top >= 0) {
-                            (true, true) => (left + top + 1) / 2,
-                            (true, false) => left,
-                            (false, true) => top,
-                            _ => 0,
-                        }
-                    };
-
-                    let dc_block = residual_block_cavlc(&mut br, n_c_dc, 16).map_err(map_bs)?;
-                    pic.nz_y_dc[mb_addr] = dc_block.total_coeff as u8;
-
-                    let mut dc_raster = [0i32; 16];
-                    for s in 0..16 {
-                        dc_raster[ZIGZAG_4X4[s]] = dc_block.levels_scan[s];
-                    }
-                    let dc_inv = inv_hadamard_4x4(dc_raster);
-
-                    for by in 0..4 {
-                        for bx in 0..4 {
-                            let blk = by * 4 + bx;
-                            let n_c = cavlc_nc_luma(pic, mb_addr, mb_x, mb_y, blk);
-                            let ac = residual_block_cavlc(&mut br, n_c, 15).map_err(map_bs)?;
-                            pic.nz_y[pic.idx_y4(mb_addr, blk)] = ac.total_coeff as u8;
-
-                            let mut scan_full = [0i32; 16];
-                            scan_full[0] = dc_inv[blk];
-                            for s in 0..15 {
-                                scan_full[s + 1] = ac.levels_scan[s];
-                            }
-
-                            let res = inv_residual_from_coeff_scan(scan_full, qp_y);
-                            let pred4 = pred4_from_pred16(&pred16, bx, by);
-
-                            let x0 = mb_x * 16 + bx * 4;
-                            let y0 = mb_y * 16 + by * 4;
-                            write_4x4_pred_plus_res(y, pic.y_stride, y_w, y_h, x0, y0, pred4, res);
-                        }
-                    }
-                }
-
-                if pic.chroma_format_idc == 1 {
-                    let PendingPlanes::Yuv4208 { y: _, u, v } = &mut pic.planes else {
-                        return Err(VideosonError::InvalidData("expected chroma planes"));
-                    };
-                    let qp_c = qp_c_from_qp_y(qp_y, pps.chroma_qp_index_offset);
-
-                    let pred_u8x8 = {
-                        let (top, left, tl) = refs_8x8_chroma(pic, mb_x, mb_y, u, pic.uv_stride);
-                        pred_chroma_8x8(intra_chroma_pred_mode, top, left, tl)
-                    };
-                    let pred_v8x8 = {
-                        let (top, left, tl) = refs_8x8_chroma(pic, mb_x, mb_y, v, pic.uv_stride);
-                        pred_chroma_8x8(intra_chroma_pred_mode, top, left, tl)
-                    };
-
-                    if cbp_chroma == 0 {
-                        for by in 0..2 {
-                            for bx in 0..2 {
-                                let blk = by * 2 + bx;
-                                let pred4u = pred4_from_pred8(&pred_u8x8, bx, by);
-                                let pred4v = pred4_from_pred8(&pred_v8x8, bx, by);
-                                let x0 = mb_x * 8 + bx * 4;
-                                let y0 = mb_y * 8 + by * 4;
-                                write_4x4(u, pic.uv_stride, pic.chroma_w, pic.chroma_h, x0, y0, &pred4u);
-                                write_4x4(v, pic.uv_stride, pic.chroma_w, pic.chroma_h, x0, y0, &pred4v);
-                                pic.nz_u[pic.idx_c4(mb_addr, blk)] = 0;
-                                pic.nz_v[pic.idx_c4(mb_addr, blk)] = 0;
-                            }
-                        }
-                    } else {
-                        let u_dc = residual_block_cavlc(&mut br, -1, 4).map_err(map_bs)?;
-                        let v_dc = residual_block_cavlc(&mut br, -1, 4).map_err(map_bs)?;
-                        let u_dc_in = inv_hadamard_2x2([
-                            u_dc.levels_scan[0],
-                            u_dc.levels_scan[1],
-                            u_dc.levels_scan[2],
-                            u_dc.levels_scan[3],
-                        ]);
-                        let v_dc_in = inv_hadamard_2x2([
-                            v_dc.levels_scan[0],
-                            v_dc.levels_scan[1],
-                            v_dc.levels_scan[2],
-                            v_dc.levels_scan[3],
-                        ]);
-
-                        for by in 0..2 {
-                            for bx in 0..2 {
-                                let blk = by * 2 + bx;
-                                let (u_ac, v_ac) = if cbp_chroma == 2 {
-                                    let ncu = cavlc_nc_chroma(pic, mb_addr, mb_x, mb_y, blk, &pic.nz_u);
-                                    let ncv = cavlc_nc_chroma(pic, mb_addr, mb_x, mb_y, blk, &pic.nz_v);
-                                    (
-                                        residual_block_cavlc(&mut br, ncu, 15).map_err(map_bs)?,
-                                        residual_block_cavlc(&mut br, ncv, 15).map_err(map_bs)?,
-                                    )
-                                } else {
-                                    CoeffBlock { levels_scan: [0; 16], max_coeff: 15, total_coeff: 0 }
-                                };
-
-                                pic.nz_u[pic.idx_c4(mb_addr, blk)] = u_ac.total_coeff as u8;
-                                pic.nz_v[pic.idx_c4(mb_addr, blk)] = v_ac.total_coeff as u8;
-
-                                let mut scan_u = [0i32; 16];
-                                let mut scan_v = [0i32; 16];
-                                scan_u[0] = u_dc_in[blk];
-                                scan_v[0] = v_dc_in[blk];
-                                if cbp_chroma == 2 {
-                                    for s in 0..15 {
-                                        scan_u[s + 1] = u_ac.levels_scan[s];
-                                        scan_v[s + 1] = v_ac.levels_scan[s];
-                                    }
-                                }
-
-                                let res_u = inv_residual_from_coeff_scan(scan_u, qp_c);
-                                let res_v = inv_residual_from_coeff_scan(scan_v, qp_c);
-                                let pred4u = pred4_from_pred8(&pred_u8x8, bx, by);
-                                let pred4v = pred4_from_pred8(&pred_v8x8, bx, by);
-
-                                let x0 = mb_x * 8 + bx * 4;
-                                let y0 = mb_y * 8 + by * 4;
-                                write_4x4_pred_plus_res(u, pic.uv_stride, pic.chroma_w, pic.chroma_h, x0, y0, pred4u, res_u);
-                                write_4x4_pred_plus_res(v, pic.uv_stride, pic.chroma_w, pic.chroma_h, x0, y0, pred4v, res_v);
+                                write_4x4_pred_plus_res(
+                                    u,
+                                    pic.uv_stride,
+                                    pic.chroma_w,
+                                    pic.chroma_h,
+                                    x0,
+                                    y0,
+                                    pred4u,
+                                    res_u,
+                                );
+                                write_4x4_pred_plus_res(
+                                    v,
+                                    pic.uv_stride,
+                                    pic.chroma_w,
+                                    pic.chroma_h,
+                                    x0,
+                                    y0,
+                                    pred4v,
+                                    res_v,
+                                );
                             }
                         }
                     }
@@ -1052,7 +965,9 @@ pub fn decode_idr_slice_into_pic(
                 continue;
             }
 
-            return Err(VideosonError::Unsupported("CAVLC: unsupported mb_type in I-slice"));
+            return Err(VideosonError::Unsupported(
+                "CAVLC: unsupported mb_type in I-slice",
+            ));
         }
 
         Ok(())
@@ -1087,8 +1002,16 @@ pub fn decode_idr_slice_into_pic(
             let mb_x = mb_addr % pic.mbs_w;
             let mb_y = mb_addr / pic.mbs_w;
 
-            let left = if mb_x > 0 { pic.neighbor_mb_type(mb_addr - 1) } else { None };
-            let top = if mb_y > 0 { pic.neighbor_mb_type(mb_addr - pic.mbs_w) } else { None };
+            let left = if mb_x > 0 {
+                pic.neighbor_mb_type(mb_addr - 1)
+            } else {
+                None
+            };
+            let top = if mb_y > 0 {
+                pic.neighbor_mb_type(mb_addr - pic.mbs_w)
+            } else {
+                None
+            };
 
             let mb_type = decode_mb_type_intra(&mut cabac, &mut ctx0_10, left, top);
             pic.mark_mb_decoded(mb_addr, mb_type);

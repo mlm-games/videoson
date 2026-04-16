@@ -4,6 +4,8 @@
 extern crate alloc;
 
 mod cabac;
+mod cabac_models;
+mod cabac_residual;
 mod cavlc;
 mod decoder;
 mod intra_pred;

@@ -120,6 +120,10 @@ pub(crate) struct PendingPic {
     pub(crate) nz_u: Vec<u8>,
     pub(crate) nz_v: Vec<u8>,
     pub(crate) nz_y_dc: Vec<u8>,
+    pub(crate) nz_u_dc: Vec<u8>,
+    pub(crate) nz_v_dc: Vec<u8>,
+    pub(crate) intra_chroma_pred_mode_mb: Vec<u8>,
+    pub(crate) qp_delta_nonzero_mb: Vec<bool>,
 }
 
 impl PendingPic {
@@ -195,6 +199,10 @@ impl PendingPic {
             nz_u: vec![0u8; total_mbs * 4],
             nz_v: vec![0u8; total_mbs * 4],
             nz_y_dc: vec![0u8; total_mbs],
+            nz_u_dc: vec![0u8; total_mbs],
+            nz_v_dc: vec![0u8; total_mbs],
+            intra_chroma_pred_mode_mb: vec![0u8; total_mbs],
+            qp_delta_nonzero_mb: vec![false; total_mbs],
         })
     }
 
