@@ -3,15 +3,8 @@
 
 extern crate alloc;
 
-mod cabac;
-mod cabac_models;
-mod cabac_residual;
-mod cavlc;
-mod decoder;
-mod intra_pred;
-mod pps;
-mod slice;
-mod sps;
-mod transform;
+mod rust_h264_decoder;
 
-pub use decoder::H264Decoder;
+pub use rust_h264_decoder::RustH264Decoder;
+
+pub type H264Decoder = RustH264Decoder;
