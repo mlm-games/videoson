@@ -32,6 +32,7 @@ pub struct VideoFrame {
     pub planes: VideoFramePlanes,
     pub pixfmt: PixelFormat,
     pub bit_depth: u8,
+    pub pts: Option<i64>,
     pub plane_data: Vec<VideoPlane>,
 }
 
@@ -43,6 +44,7 @@ impl VideoFrame {
             planes: VideoFramePlanes::Mono,
             pixfmt: PixelFormat::Gray,
             bit_depth: 8,
+            pts: None,
             plane_data: vec![VideoPlane {
                 stride,
                 data: PlaneData::U8(y),
@@ -66,6 +68,7 @@ impl VideoFrame {
             planes: VideoFramePlanes::Yuv420,
             pixfmt: PixelFormat::Yuv420,
             bit_depth: 8,
+            pts: None,
             plane_data: vec![
                 VideoPlane {
                     stride: y_stride,
