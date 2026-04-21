@@ -7,7 +7,7 @@ use alloc::string::ToString;
 use core::cmp::Reverse;
 
 use rust_h264::decoder::OrderedDecoder as Inner;
-use rust_h264::nal::{parse_annex_b, parse_avcc, parse_avcc_config, NalUnit};
+use rust_h264::nal::{NalUnit, parse_annex_b, parse_avcc, parse_avcc_config};
 
 use videoson_core::{
     CodecType, NalFormat, Packet, PlaneData, Result, VideoCodecParams, VideoDecoder,

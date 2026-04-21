@@ -2,7 +2,7 @@ use alloc::vec::Vec;
 
 use videoson_core::Packet;
 
-use crate::header::{IvfFileHeader, IvfFrameHeader, IVF_FILE_HEADER_LEN, IVF_FRAME_HEADER_LEN};
+use crate::header::{IVF_FILE_HEADER_LEN, IVF_FRAME_HEADER_LEN, IvfFileHeader, IvfFrameHeader};
 
 pub struct IvfDemuxer {
     data: Vec<u8>,

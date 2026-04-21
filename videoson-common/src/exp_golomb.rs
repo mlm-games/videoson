@@ -21,9 +21,5 @@ pub fn read_ue(br: &mut BitReader<'_>) -> BitstreamResult<u32> {
 pub fn read_se(br: &mut BitReader<'_>) -> BitstreamResult<i32> {
     let code_num = read_ue(br)? as i32;
     let m = (code_num + 1) >> 1;
-    if (code_num & 1) == 0 {
-        Ok(-m)
-    } else {
-        Ok(m)
-    }
+    if (code_num & 1) == 0 { Ok(-m) } else { Ok(m) }
 }

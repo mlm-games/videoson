@@ -324,11 +324,7 @@ fn parse_visual_sample_entry_dimensions(
     }
     let w = be_u16(&data[entry_ps + 24..entry_ps + 26]) as u32;
     let h = be_u16(&data[entry_ps + 26..entry_ps + 28]) as u32;
-    if w == 0 || h == 0 {
-        None
-    } else {
-        Some((w, h))
-    }
+    if w == 0 || h == 0 { None } else { Some((w, h)) }
 }
 
 fn parse_stsd_and_codec(
@@ -366,7 +362,7 @@ fn parse_stsd_and_codec(
         _ => {
             return Err(VideosonError::Unsupported(
                 "mp4: unsupported video sample entry",
-            ))
+            ));
         }
     };
 
