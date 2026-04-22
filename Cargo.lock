@@ -408,9 +408,9 @@ dependencies = [
 
 [[package]]
 name = "rust_h264"
-version = "0.3.0"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "851af7d2d80f2f15451499f29a1ff753bef71d15010880a04cbcfa1f415e8914"
+checksum = "fbedf5e104105e8783a77926f1e212ea37e78fd3b38b2c928938a283d083d6f1"
 
 [[package]]
 name = "rustversion"
