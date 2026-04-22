@@ -7,8 +7,6 @@ members = [
   "videoson-codec-h264",
   "videoson-codec-av1",
   "videoson-format-ivf",
-  "videoson-format-mp4",
-  "videoson-format-mkv",
   "testbench",
 ]
 

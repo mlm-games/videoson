@@ -21,7 +21,4 @@ impl fmt::Display for BitstreamError {
     }
 }
 
-#[cfg(feature = "std")]
-impl std::error::Error for BitstreamError {}
-
 pub type BitstreamResult<T> = core::result::Result<T, BitstreamError>;
