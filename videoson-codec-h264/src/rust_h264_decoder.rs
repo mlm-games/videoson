@@ -6,6 +6,7 @@ use alloc::collections::{BinaryHeap, VecDeque};
 use alloc::string::ToString;
 use core::cmp::Reverse;
 
+use alloc::vec;
 use alloc::vec::Vec;
 
 use rust_h264::decoder::OrderedDecoder as Inner;
