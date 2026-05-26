@@ -12,10 +12,10 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.1"
+version = "0.1.2"
 edition = "2024"
 license = "LGPL-2.1"
-rust-version = "1.85"
+rust-version = "1.93"
 
 [workspace.dependencies]
 videoson-core = { path = "videoson-core", version = "0.0.0" }

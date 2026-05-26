@@ -7,4 +7,4 @@ rust-version.workspace = true
 
 [dependencies]
 videoson-core = { path = "../videoson-core" }
-rav1d-safe = "0.3"
+rav1d-safe = "0.5"
