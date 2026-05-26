@@ -729,8 +729,10 @@ checksum = "03c2856837ef78f57382f06b2b8563a2f512f7185d732608fd9176cb3b8edf0e"
 
 [[package]]
 name = "videoson"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
+ "videoson-codec-h264",
+ "videoson-codec-rav1d",
  "videoson-common",
  "videoson-core",
  "videoson-format-ivf",
@@ -738,7 +740,7 @@ dependencies = [
 
 [[package]]
 name = "videoson-codec-av1"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "dav1d",
  "libc",
@@ -748,7 +750,7 @@ dependencies = [
 
 [[package]]
 name = "videoson-codec-h264"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "rust_h264",
  "videoson-common",
@@ -757,7 +759,7 @@ dependencies = [
 
 [[package]]
 name = "videoson-codec-rav1d"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "rav1d-safe",
  "videoson-core",
@@ -765,15 +767,15 @@ dependencies = [
 
 [[package]]
 name = "videoson-common"
-version = "0.1.0"
+version = "0.1.1"
 
 [[package]]
 name = "videoson-core"
-version = "0.1.0"
+version = "0.1.1"
 
 [[package]]
 name = "videoson-format-ivf"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "videoson-common",
  "videoson-core",

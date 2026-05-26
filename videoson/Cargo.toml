@@ -5,7 +5,14 @@ edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
+[features]
+default = ["h264", "rav1d"]
+h264 = ["dep:videoson-codec-h264"]
+rav1d = ["dep:videoson-codec-rav1d"]
+
 [dependencies]
 videoson-core = { path = "../videoson-core" }
 videoson-common = { path = "../videoson-common" }
 videoson-format-ivf = { path = "../videoson-format-ivf" }
+videoson-codec-h264 = { path = "../videoson-codec-h264", optional = true }
+videoson-codec-rav1d = { path = "../videoson-codec-rav1d", optional = true }
