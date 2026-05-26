@@ -6,6 +6,7 @@ mod codec;
 mod errors;
 mod format;
 mod packet;
+mod registry;
 mod units;
 mod video;
 
@@ -13,6 +14,7 @@ pub use codec::*;
 pub use errors::*;
 pub use format::*;
 pub use packet::*;
+pub use registry::*;
 pub use units::*;
 pub use video::*;
 

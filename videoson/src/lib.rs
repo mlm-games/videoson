@@ -3,11 +3,12 @@
 pub use videoson_core::{
     CodecType, Packet, PixelFormat, PlaneData, Result, VideoCodecParams, VideoDecoder,
     VideoDecoderOptions, VideoFrame, VideoFramePlanes, VideoPlane, VideosonError,
+    CodecRegistry, RegisterableVideoDecoder, SupportedVideoCodec,
 };
 
 pub mod prelude {
     pub use videoson_core::{
         CodecType, Packet, PixelFormat, Result, VideoCodecParams, VideoDecoder,
-        VideoDecoderOptions, VideoFrame, VideosonError,
+        VideoDecoderOptions, VideoFrame, VideosonError, CodecRegistry,
     };
 }
