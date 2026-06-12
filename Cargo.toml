@@ -5,7 +5,6 @@ members = [
   "videoson-core",
   "videoson-common",
   "videoson-codec-h264",
-  "videoson-codec-av1",
   "videoson-codec-rav1d",
   "videoson-format-ivf",
   "testbench",

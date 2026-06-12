@@ -11,7 +11,6 @@ A Rust video demux/decode workspace inspired by Symphonia.
 | `videoson-format-ivf` | IVF demuxer/header parser |
 | `videoson-codec-h264` | H.264 decoder (wraps `rust_h264`, 8-bit YUV420/mono) |
 | `videoson-codec-rav1d` | AV1 decoder (wraps `rav1d-safe`, GPLv3) |
-| `videoson-codec-av1` | Multi-backend AV1 abstraction (not yet functional) |
 | `videoson` | Facade crate with pre-populated registry |
 
 ## Status
