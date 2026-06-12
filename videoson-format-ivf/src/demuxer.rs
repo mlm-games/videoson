@@ -1,6 +1,7 @@
+use alloc::vec;
 use alloc::vec::Vec;
 
-use videoson_core::Packet;
+use videoson_core::{Demuxer, Packet, TimeBase, VideoCodecParams};
 
 use crate::header::{IVF_FILE_HEADER_LEN, IVF_FRAME_HEADER_LEN, IvfFileHeader, IvfFrameHeader};
 
@@ -10,6 +11,7 @@ pub struct IvfDemuxer {
     file_header: IvfFileHeader,
     track_id: u32,
     frame_index: u64,
+    tracks: Vec<videoson_core::Track>,
 }
 
 impl IvfDemuxer {
@@ -18,12 +20,32 @@ impl IvfDemuxer {
             return Err(videoson_core::VideosonError::NeedMoreData);
         }
         let file_header = IvfFileHeader::parse(&data[..IVF_FILE_HEADER_LEN])?;
+
+        let codec = file_header
+            .codec
+            .to_codec_type()
+            .ok_or(videoson_core::VideosonError::Unsupported("IVF codec"))?;
+
+        let mut codec_params = VideoCodecParams::new(codec);
+        codec_params.coded_width = file_header.width as u32;
+        codec_params.coded_height = file_header.height as u32;
+
+        let time_base =
+            TimeBase::new(file_header.fps_den, file_header.fps_num.max(1));
+
+        let tracks = vec![videoson_core::Track {
+            id: 0,
+            codec_params,
+            time_base: Some(time_base),
+        }];
+
         Ok(Self {
             data,
             pos: IVF_FILE_HEADER_LEN,
             file_header,
             track_id: 0,
             frame_index: 0,
+            tracks,
         })
     }
 
@@ -106,5 +128,15 @@ impl IvfDemuxer {
 
     pub fn total_bytes(&self) -> usize {
         self.data.len()
+    }
+}
+
+impl Demuxer for IvfDemuxer {
+    fn tracks(&self) -> &[videoson_core::Track] {
+        &self.tracks
+    }
+
+    fn next_packet(&mut self) -> videoson_core::Result<Option<Packet>> {
+        self.next_packet()
     }
 }

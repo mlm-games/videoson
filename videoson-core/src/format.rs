@@ -1,7 +1,5 @@
 extern crate alloc;
 
-use alloc::vec::Vec;
-
 use crate::{Packet, Result, TimeBase, VideoCodecParams};
 
 #[derive(Debug, Clone)]

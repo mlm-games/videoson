@@ -55,7 +55,7 @@ impl IvfFileHeader {
         if buf.len() < IVF_FILE_HEADER_LEN {
             return Err(videoson_core::VideosonError::NeedMoreData);
         }
-        if buf[0] != b'D' || buf[1] != b'K' || buf[2] != b'I' || buf[3] != b'F' {
+        if &buf[..4] != IVF_SIGNATURE {
             return Err(videoson_core::VideosonError::InvalidData(
                 "IVF: bad signature",
             ));

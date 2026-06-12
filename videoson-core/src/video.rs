@@ -38,6 +38,11 @@ pub struct VideoFrame {
 }
 
 impl VideoFrame {
+    pub fn with_pts(mut self, pts: Option<i64>) -> Self {
+        self.pts = pts;
+        self
+    }
+
     pub fn new_mono_u8(width: u32, height: u32, stride: usize, y: Vec<u8>) -> Self {
         Self {
             width,

@@ -2,8 +2,8 @@ use std::collections::VecDeque;
 
 use rav1d_safe::{Decoder, Frame, Planes};
 use videoson_core::{
-    CodecType, Packet, PixelFormat, PlaneData, Result, VideoCodecParams, VideoDecoder,
-    VideoDecoderOptions, VideoFrame, VideoFramePlanes, VideoPlane, VideosonError,
+    CodecType, Packet, Result, VideoCodecParams, VideoDecoder,
+    VideoDecoderOptions, VideoFrame, VideosonError,
     RegisterableVideoDecoder, SupportedVideoCodec,
 };
 
@@ -93,7 +93,6 @@ impl RegisterableVideoDecoder for Rav1dSafeDecoder {
 
 impl Rav1dSafeDecoder {
     fn frame_to_video_frame(frame: &Frame, pts: Option<i64>) -> Result<VideoFrame> {
-        let w = frame.width() as usize;
         let h = frame.height() as usize;
 
         match frame.planes() {
@@ -123,7 +122,8 @@ impl Rav1dSafeDecoder {
                     frame.height(),
                     y_stride, u_stride, v_stride,
                     y_data, u_data, v_data,
-                ))
+                )
+                .with_pts(pts))
             }
             Planes::Depth16(_) => Err(VideosonError::Unsupported("16-bit AV1 not supported")),
         }

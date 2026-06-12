@@ -38,43 +38,64 @@ impl RustH264Decoder {
     }
 
     fn push_frame(&mut self, f: rust_h264::decoder::Frame) {
-        // rust_h264 guarantees tightly packed planes:
-        // y: width*height, u/v: (width/2)*(height/2)
         let w = f.width as usize;
         let h = f.height as usize;
-        let cw = w / 2;
-        let ch = h / 2;
 
-        // Sanity checks (avoid panics if upstream changes):
-        if f.y.len() != w * h || f.u.len() != cw * ch || f.v.len() != cw * ch {
-            // best effort: drop frame
+        if f.y.len() < w * h {
             return;
         }
-
+        let y_visible = &f.y[..w * h];
         let frame_pts = self.pts_queue.pop().map(|Reverse(pts)| pts);
 
-        self.out.push_back(VideoFrame {
-            width: f.width,
-            height: f.height,
-            planes: VideoFramePlanes::Yuv420,
-            pixfmt: videoson_core::PixelFormat::Yuv420,
-            bit_depth: 8,
-            pts: frame_pts,
-            plane_data: vec![
-                VideoPlane {
+        // Detect monochrome: chroma planes all-zero (rust_h264 allocates u/v
+        // at 4:2:0 size even for chroma_format_idc=0 but leaves them zeroed).
+        let is_mono = f.u.is_empty()
+            || (f.u.len() <= (w / 2) * (h / 2) && f.u.iter().all(|&b| b == 0)
+                && f.v.iter().all(|&b| b == 0));
+
+        if is_mono {
+            self.out.push_back(VideoFrame {
+                width: f.width,
+                height: f.height,
+                planes: VideoFramePlanes::Mono,
+                pixfmt: videoson_core::PixelFormat::Gray,
+                bit_depth: 8,
+                pts: frame_pts,
+                plane_data: vec![VideoPlane {
                     stride: w,
-                    data: PlaneData::U8(f.y),
-                },
-                VideoPlane {
-                    stride: cw,
-                    data: PlaneData::U8(f.u),
-                },
-                VideoPlane {
-                    stride: cw,
-                    data: PlaneData::U8(f.v),
-                },
-            ],
-        });
+                    data: PlaneData::U8(y_visible.to_vec()),
+                }],
+            });
+        } else {
+            let cw = w / 2;
+            let ch = h / 2;
+
+            let u_visible = if f.u.len() >= cw * ch { &f.u[..cw * ch] } else { &f.u };
+            let v_visible = if f.v.len() >= cw * ch { &f.v[..cw * ch] } else { &f.v };
+
+            self.out.push_back(VideoFrame {
+                width: f.width,
+                height: f.height,
+                planes: VideoFramePlanes::Yuv420,
+                pixfmt: videoson_core::PixelFormat::Yuv420,
+                bit_depth: 8,
+                pts: frame_pts,
+                plane_data: vec![
+                    VideoPlane {
+                        stride: w,
+                        data: PlaneData::U8(y_visible.to_vec()),
+                    },
+                    VideoPlane {
+                        stride: cw,
+                        data: PlaneData::U8(u_visible.to_vec()),
+                    },
+                    VideoPlane {
+                        stride: cw,
+                        data: PlaneData::U8(v_visible.to_vec()),
+                    },
+                ],
+            });
+        }
     }
 
     fn feed_nal(&mut self, nal: &NalUnit<'_>) -> Result<()> {

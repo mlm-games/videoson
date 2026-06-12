@@ -1,5 +1,7 @@
 #![no_std]
 
+extern crate alloc;
+
 pub use videoson_core::{
     CodecType, Packet, PixelFormat, PlaneData, Result, VideoCodecParams, VideoDecoder,
     VideoDecoderOptions, VideoFrame, VideoFramePlanes, VideoPlane, VideosonError,
@@ -17,6 +19,24 @@ pub use videoson_codec_rav1d as codec_rav1d;
 
 #[cfg(feature = "rav1d")]
 pub use videoson_codec_rav1d::Rav1dSafeDecoder;
+
+#[cfg(feature = "ivf")]
+pub use videoson_format_ivf as format_ivf;
+
+#[cfg(feature = "ivf")]
+pub use videoson_format_ivf::{IvfCodec, IvfDemuxer, IvfFileHeader, IvfFrameHeader};
+
+pub fn default_registry() -> CodecRegistry {
+    let mut reg = CodecRegistry::new();
+
+    #[cfg(feature = "h264")]
+    reg.register_video_decoder::<H264Decoder>();
+
+    #[cfg(feature = "rav1d")]
+    reg.register_video_decoder::<Rav1dSafeDecoder>();
+
+    reg
+}
 
 pub mod prelude {
     pub use videoson_core::{
