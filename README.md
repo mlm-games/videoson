@@ -1,6 +1,6 @@
 # videoson
 
-A Rust video demux/decode workspace inspired by Symphonia.
+A Rust video decode wrapper, with it's workspace design being inspired by Symphonia.
 
 ## Workspace Crates
 
