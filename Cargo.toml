@@ -5,13 +5,14 @@ members = [
   "videoson-core",
   "videoson-common",
   "videoson-codec-h264",
+  "videoson-codec-h265",
   "videoson-codec-rav1d",
   "videoson-format-ivf",
   "testbench",
 ]
 
 [workspace.package]
-version = "0.1.2"
+version = "0.2.0"
 edition = "2024"
 license = "LGPL-2.1"
 rust-version = "1.93"
@@ -20,3 +21,4 @@ rust-version = "1.93"
 videoson-core = { path = "videoson-core", version = "0.0.0" }
 videoson-common = { path = "videoson-common", version = "0.0.0" }
 rust_h264 = { version = "0.4.0" }
+rust_h265 = { version = "0.1.0" }

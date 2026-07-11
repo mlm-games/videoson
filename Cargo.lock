@@ -343,6 +343,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fbedf5e104105e8783a77926f1e212ea37e78fd3b38b2c928938a283d083d6f1"
 
 [[package]]
+name = "rust_h265"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dde60f5842f27ed06f1d84844cacd93d1a159f606365b30a5594c771e6b4eb17"
+
+[[package]]
 name = "safe_unaligned_simd"
 version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -417,6 +423,7 @@ dependencies = [
  "anyhow",
  "less-avc",
  "videoson-codec-h264",
+ "videoson-codec-h265",
  "videoson-core",
  "videoson-format-ivf",
 ]
@@ -435,9 +442,10 @@ checksum = "e6e4313cd5fcd3dad5cafa179702e2b244f760991f45397d14d4ebf38247da75"
 
 [[package]]
 name = "videoson"
-version = "0.1.2"
+version = "0.2.0"
 dependencies = [
  "videoson-codec-h264",
+ "videoson-codec-h265",
  "videoson-codec-rav1d",
  "videoson-common",
  "videoson-core",
@@ -446,7 +454,7 @@ dependencies = [
 
 [[package]]
 name = "videoson-codec-h264"
-version = "0.1.2"
+version = "0.2.0"
 dependencies = [
  "rust_h264",
  "videoson-common",
@@ -454,8 +462,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "videoson-codec-h265"
+version = "0.2.0"
+dependencies = [
+ "rust_h265",
+ "videoson-common",
+ "videoson-core",
+]
+
+[[package]]
 name = "videoson-codec-rav1d"
-version = "0.1.2"
+version = "0.2.0"
 dependencies = [
  "rav1d-safe",
  "videoson-core",
@@ -463,15 +480,15 @@ dependencies = [
 
 [[package]]
 name = "videoson-common"
-version = "0.1.2"
+version = "0.2.0"
 
 [[package]]
 name = "videoson-core"
-version = "0.1.2"
+version = "0.2.0"
 
 [[package]]
 name = "videoson-format-ivf"
-version = "0.1.2"
+version = "0.2.0"
 dependencies = [
  "videoson-common",
  "videoson-core",

@@ -15,6 +15,12 @@ pub use videoson_codec_h264 as codec_h264;
 #[cfg(feature = "h264")]
 pub use videoson_codec_h264::H264Decoder;
 
+#[cfg(feature = "h265")]
+pub use videoson_codec_h265 as codec_h265;
+
+#[cfg(feature = "h265")]
+pub use videoson_codec_h265::H265Decoder;
+
 #[cfg(feature = "rav1d")]
 pub use videoson_codec_rav1d as codec_rav1d;
 
@@ -32,6 +38,9 @@ pub fn default_registry() -> CodecRegistry {
 
     #[cfg(feature = "h264")]
     reg.register_video_decoder::<H264Decoder>();
+
+    #[cfg(feature = "h265")]
+    reg.register_video_decoder::<H265Decoder>();
 
     #[cfg(feature = "rav1d")]
     reg.register_video_decoder::<Rav1dSafeDecoder>();

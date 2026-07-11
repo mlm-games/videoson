@@ -7,6 +7,7 @@ mod avcc;
 mod bitreader;
 mod error;
 mod exp_golomb;
+mod hvcc;
 mod rbsp;
 
 pub use annexb::*;
@@ -14,4 +15,5 @@ pub use avcc::*;
 pub use bitreader::*;
 pub use error::*;
 pub use exp_golomb::*;
+pub use hvcc::*;
 pub use rbsp::*;

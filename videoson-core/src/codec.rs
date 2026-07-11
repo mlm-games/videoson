@@ -38,6 +38,7 @@ pub enum VideoFramePlanes {
 pub enum NalFormat {
     AnnexB,
     Avcc { nal_len_size: u8 },
+    Hvcc { nal_len_size: u8 },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
