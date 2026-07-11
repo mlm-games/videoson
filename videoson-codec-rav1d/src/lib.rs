@@ -2,27 +2,29 @@ use std::collections::VecDeque;
 
 use rav1d_safe::{Decoder, Frame, Planes};
 use videoson_core::{
-    CodecType, Packet, Result, VideoCodecParams, VideoDecoder,
-    VideoDecoderOptions, VideoFrame, VideosonError,
-    RegisterableVideoDecoder, SupportedVideoCodec,
+    interleave_uv_nv12, CodecType, Packet, RegisterableVideoDecoder, Result, SupportedVideoCodec,
+    VideoCodecParams, VideoDecoder, VideoDecoderOptions, VideoFrame, VideoOutputFormat,
+    VideosonError,
 };
 
 pub struct Rav1dSafeDecoder {
     params: VideoCodecParams,
+    opts: VideoDecoderOptions,
     decoder: Decoder,
     queued: VecDeque<VideoFrame>,
     eos_sent: bool,
 }
 
 impl VideoDecoder for Rav1dSafeDecoder {
-    fn try_new(params: &VideoCodecParams, _opts: &VideoDecoderOptions) -> Result<Self> {
+    fn try_new(params: &VideoCodecParams, opts: &VideoDecoderOptions) -> Result<Self> {
         if params.codec != CodecType::AV1 {
             return Err(VideosonError::InvalidData("not AV1"));
         }
-        let decoder = Decoder::new()
-            .map_err(|e| VideosonError::Message(format!("rav1d init: {e}")))?;
+        let decoder =
+            Decoder::new().map_err(|e| VideosonError::Message(format!("rav1d init: {e}")))?;
         Ok(Self {
             params: params.clone(),
+            opts: *opts,
             decoder,
             queued: VecDeque::new(),
             eos_sent: false,
@@ -36,7 +38,7 @@ impl VideoDecoder for Rav1dSafeDecoder {
     fn send_packet(&mut self, packet: &Packet) -> Result<()> {
         match self.decoder.decode(&packet.data) {
             Ok(Some(frame)) => {
-                let vf = Self::frame_to_video_frame(&frame, packet.pts)?;
+                let vf = self.frame_to_video_frame(&frame, packet.pts)?;
                 self.queued.push_back(vf);
                 Ok(())
             }
@@ -58,7 +60,7 @@ impl VideoDecoder for Rav1dSafeDecoder {
                 .flush()
                 .map_err(|e| VideosonError::Message(format!("rav1d flush: {e}")))?;
             for frame in frames {
-                let vf = Self::frame_to_video_frame(&frame, None)?;
+                let vf = self.frame_to_video_frame(&frame, None)?;
                 self.queued.push_back(vf);
             }
         }
@@ -71,6 +73,13 @@ impl VideoDecoder for Rav1dSafeDecoder {
         }
         self.queued.clear();
         self.eos_sent = false;
+    }
+
+    fn output_format(&self) -> VideoOutputFormat {
+        match self.opts.output_format {
+            VideoOutputFormat::Nv12 => VideoOutputFormat::Nv12,
+            _ => VideoOutputFormat::Yuv420,
+        }
     }
 }
 
@@ -92,8 +101,13 @@ impl RegisterableVideoDecoder for Rav1dSafeDecoder {
 }
 
 impl Rav1dSafeDecoder {
-    fn frame_to_video_frame(frame: &Frame, pts: Option<i64>) -> Result<VideoFrame> {
+    fn wants_nv12(&self) -> bool {
+        matches!(self.opts.output_format, VideoOutputFormat::Nv12)
+    }
+
+    fn frame_to_video_frame(&self, frame: &Frame, pts: Option<i64>) -> Result<VideoFrame> {
         let h = frame.height() as usize;
+        let w = frame.width() as usize;
 
         match frame.planes() {
             Planes::Depth8(planes) => {
@@ -101,29 +115,59 @@ impl Rav1dSafeDecoder {
                 let u_plane = planes.u().unwrap_or_else(|| planes.y());
                 let v_plane = planes.v().unwrap_or_else(|| planes.y());
 
-                let y_stride = y_plane.row(0).len();
                 let u_stride = u_plane.row(0).len();
                 let v_stride = v_plane.row(0).len();
 
-                let mut y_data = Vec::with_capacity(y_stride * h);
-                let mut u_data = Vec::with_capacity(u_stride * (h / 2));
-                let mut v_data = Vec::with_capacity(v_stride * (h / 2));
-
+                // Pack Y tightly to width.
+                let mut y_data = Vec::with_capacity(w * h);
                 for row in 0..h {
-                    y_data.extend_from_slice(y_plane.row(row));
-                }
-                for row in 0..h / 2 {
-                    u_data.extend_from_slice(u_plane.row(row));
-                    v_data.extend_from_slice(v_plane.row(row));
+                    let row_bytes = y_plane.row(row);
+                    let take = w.min(row_bytes.len());
+                    y_data.extend_from_slice(&row_bytes[..take]);
                 }
 
-                Ok(VideoFrame::new_yuv420_u8(
-                    frame.width(),
-                    frame.height(),
-                    y_stride, u_stride, v_stride,
-                    y_data, u_data, v_data,
-                )
-                .with_pts(pts))
+                let cw = (w + 1) / 2;
+                let ch = (h + 1) / 2;
+
+                if self.wants_nv12() {
+                    let mut u_tmp = Vec::with_capacity(u_stride * ch);
+                    let mut v_tmp = Vec::with_capacity(v_stride * ch);
+                    for row in 0..ch {
+                        u_tmp.extend_from_slice(u_plane.row(row));
+                        v_tmp.extend_from_slice(v_plane.row(row));
+                    }
+                    let uv = interleave_uv_nv12(&u_tmp, u_stride, &v_tmp, v_stride, cw, ch);
+                    Ok(VideoFrame::new_nv12_u8(
+                        frame.width(),
+                        frame.height(),
+                        w,
+                        cw * 2,
+                        y_data,
+                        uv,
+                    )
+                    .with_pts(pts))
+                } else {
+                    let mut u_data = Vec::with_capacity(cw * ch);
+                    let mut v_data = Vec::with_capacity(cw * ch);
+                    for row in 0..ch {
+                        let u_row = u_plane.row(row);
+                        let v_row = v_plane.row(row);
+                        let take = cw.min(u_row.len()).min(v_row.len());
+                        u_data.extend_from_slice(&u_row[..take]);
+                        v_data.extend_from_slice(&v_row[..take]);
+                    }
+                    Ok(VideoFrame::new_yuv420_u8(
+                        frame.width(),
+                        frame.height(),
+                        w,
+                        cw,
+                        cw,
+                        y_data,
+                        u_data,
+                        v_data,
+                    )
+                    .with_pts(pts))
+                }
             }
             Planes::Depth16(_) => Err(VideosonError::Unsupported("16-bit AV1 not supported")),
         }

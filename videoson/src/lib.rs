@@ -3,9 +3,10 @@
 extern crate alloc;
 
 pub use videoson_core::{
-    CodecType, Packet, PixelFormat, PlaneData, Result, VideoCodecParams, VideoDecoder,
-    VideoDecoderOptions, VideoFrame, VideoFramePlanes, VideoPlane, VideosonError,
-    CodecRegistry, RegisterableVideoDecoder, SupportedVideoCodec, NalFormat,
+    CodecRegistry, CodecType, ColorInfo, NalFormat, Packet, PixelFormat, PlaneData,
+    RegisterableVideoDecoder, Result, SupportedVideoCodec, VideoCodecParams, VideoDecoder,
+    VideoDecoderOptions, VideoFrame, VideoFramePlanes, VideoOutputFormat, VideoPlane,
+    VideosonError,
 };
 
 #[cfg(feature = "h264")]
@@ -40,7 +41,7 @@ pub fn default_registry() -> CodecRegistry {
 
 pub mod prelude {
     pub use videoson_core::{
-        CodecType, Packet, PixelFormat, Result, VideoCodecParams, VideoDecoder,
-        VideoDecoderOptions, VideoFrame, VideosonError, CodecRegistry,
+        CodecRegistry, CodecType, Packet, PixelFormat, Result, VideoCodecParams, VideoDecoder,
+        VideoDecoderOptions, VideoFrame, VideosonError,
     };
 }

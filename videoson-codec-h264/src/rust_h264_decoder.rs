@@ -1,32 +1,27 @@
-// Output: videoson_core::VideoFrame (YUV420, 8-bit, tightly packed, stride == width).
+// Output: videoson_core::VideoFrame
+// - default / Yuv420: planar YUV420, tightly packed
+// - Nv12: semi-planar Y + UV interleaved, tightly packed
 
 extern crate alloc;
 
 use alloc::collections::{BinaryHeap, VecDeque};
 use alloc::string::ToString;
+use alloc::vec::Vec;
 use core::cmp::Reverse;
 
-use alloc::vec;
-use alloc::vec::Vec;
-
 use rust_h264::decoder::OrderedDecoder as Inner;
-use rust_h264::nal::{NalUnit, parse_annex_b, parse_avcc, parse_avcc_config};
+use rust_h264::nal::{parse_annex_b, parse_avcc, parse_avcc_config, NalUnit};
 
 use videoson_core::{
-    CodecType, NalFormat, Packet, PlaneData, Result, VideoCodecParams, VideoDecoder,
-    VideoDecoderOptions, VideoFrame, VideoFramePlanes, VideoPlane, VideosonError,
+    interleave_uv_nv12, CodecType, NalFormat, Packet, Result, VideoCodecParams, VideoDecoder,
+    VideoDecoderOptions, VideoFrame, VideoOutputFormat, VideosonError,
 };
 
 pub struct RustH264Decoder {
     params: VideoCodecParams,
-    _opts: VideoDecoderOptions,
-
+    opts: VideoDecoderOptions,
     nal_format: NalFormat,
-
-    // AVCC: how many bytes are used for NAL lengths in samples (1/2/4).
-    // If None, fall back to params.nal_format nal_len_size.
     avcc_length_size: Option<usize>,
-
     dec: Inner,
     out: VecDeque<VideoFrame>,
     pts_queue: BinaryHeap<Reverse<i64>>,
@@ -35,6 +30,10 @@ pub struct RustH264Decoder {
 impl RustH264Decoder {
     fn map_err<E: core::fmt::Display>(e: E) -> VideosonError {
         VideosonError::Message(e.to_string().into())
+    }
+
+    fn wants_nv12(&self) -> bool {
+        matches!(self.opts.output_format, VideoOutputFormat::Nv12)
     }
 
     fn push_frame(&mut self, f: rust_h264::decoder::Frame) {
@@ -47,54 +46,53 @@ impl RustH264Decoder {
         let y_visible = &f.y[..w * h];
         let frame_pts = self.pts_queue.pop().map(|Reverse(pts)| pts);
 
-        // Detect monochrome: chroma planes all-zero (rust_h264 allocates u/v
-        // at 4:2:0 size even for chroma_format_idc=0 but leaves them zeroed).
+        // rust_h264 may leave empty/zero chroma for mono.
         let is_mono = f.u.is_empty()
-            || (f.u.len() <= (w / 2) * (h / 2) && f.u.iter().all(|&b| b == 0)
+            || (f.u.len() <= (w / 2) * (h / 2)
+                && f.u.iter().all(|&b| b == 0)
                 && f.v.iter().all(|&b| b == 0));
 
         if is_mono {
-            self.out.push_back(VideoFrame {
-                width: f.width,
-                height: f.height,
-                planes: VideoFramePlanes::Mono,
-                pixfmt: videoson_core::PixelFormat::Gray,
-                bit_depth: 8,
-                pts: frame_pts,
-                plane_data: vec![VideoPlane {
-                    stride: w,
-                    data: PlaneData::U8(y_visible.to_vec()),
-                }],
-            });
+            self.out.push_back(
+                VideoFrame::new_mono_u8(f.width, f.height, w, y_visible.to_vec())
+                    .with_pts(frame_pts),
+            );
+            return;
+        }
+
+        let cw = w / 2;
+        let ch = h / 2;
+        let u_visible = if f.u.len() >= cw * ch {
+            &f.u[..cw * ch]
         } else {
-            let cw = w / 2;
-            let ch = h / 2;
+            &f.u
+        };
+        let v_visible = if f.v.len() >= cw * ch {
+            &f.v[..cw * ch]
+        } else {
+            &f.v
+        };
 
-            let u_visible = if f.u.len() >= cw * ch { &f.u[..cw * ch] } else { &f.u };
-            let v_visible = if f.v.len() >= cw * ch { &f.v[..cw * ch] } else { &f.v };
-
-            self.out.push_back(VideoFrame {
-                width: f.width,
-                height: f.height,
-                planes: VideoFramePlanes::Yuv420,
-                pixfmt: videoson_core::PixelFormat::Yuv420,
-                bit_depth: 8,
-                pts: frame_pts,
-                plane_data: vec![
-                    VideoPlane {
-                        stride: w,
-                        data: PlaneData::U8(y_visible.to_vec()),
-                    },
-                    VideoPlane {
-                        stride: cw,
-                        data: PlaneData::U8(u_visible.to_vec()),
-                    },
-                    VideoPlane {
-                        stride: cw,
-                        data: PlaneData::U8(v_visible.to_vec()),
-                    },
-                ],
-            });
+        if self.wants_nv12() {
+            let uv = interleave_uv_nv12(u_visible, cw, v_visible, cw, cw, ch);
+            self.out.push_back(
+                VideoFrame::new_nv12_u8(f.width, f.height, w, cw * 2, y_visible.to_vec(), uv)
+                    .with_pts(frame_pts),
+            );
+        } else {
+            self.out.push_back(
+                VideoFrame::new_yuv420_u8(
+                    f.width,
+                    f.height,
+                    w,
+                    cw,
+                    cw,
+                    y_visible.to_vec(),
+                    u_visible.to_vec(),
+                    v_visible.to_vec(),
+                )
+                .with_pts(frame_pts),
+            );
         }
     }
 
@@ -115,8 +113,7 @@ impl RustH264Decoder {
             return Ok(());
         }
 
-        // Your MP4 demuxer stores extradata INCLUDING the 8-byte box header (size + "avcC").
-        // rust_h264 expects the *payload* only.
+        // MP4 demuxers often include the 8-byte "avcC" box header.
         let payload: &[u8] =
             if self.params.extradata.len() >= 8 && &self.params.extradata[4..8] == b"avcC" {
                 &self.params.extradata[8..]
@@ -127,12 +124,9 @@ impl RustH264Decoder {
         let cfg = parse_avcc_config(payload).map_err(Self::map_err)?;
         self.avcc_length_size = Some(cfg.length_size);
 
-        // Feed SPS/PPS once before sample NALs.
         for nal in cfg.sps_nals.iter().chain(cfg.pps_nals.iter()) {
-            // No frames expected here; ignore if returned.
             let _ = self.dec.decode_nal(nal).map_err(Self::map_err)?;
         }
-
         Ok(())
     }
 
@@ -158,7 +152,7 @@ impl VideoDecoder for RustH264Decoder {
 
         let mut me = Self {
             params: params.clone(),
-            _opts: *opts,
+            opts: *opts,
             nal_format,
             avcc_length_size: None,
             dec: Inner::new(),
@@ -166,8 +160,6 @@ impl VideoDecoder for RustH264Decoder {
             pts_queue: BinaryHeap::new(),
         };
 
-        // If this is MP4/AVCC, prime with avcC SPS/PPS (if present).
-        // If stream is AnnexB and includes SPS/PPS inline, this is a no-op.
         if matches!(me.nal_format, NalFormat::Avcc { .. }) {
             me.prime_with_avcc_extradata()?;
         }
@@ -210,6 +202,13 @@ impl VideoDecoder for RustH264Decoder {
 
         if matches!(self.nal_format, NalFormat::Avcc { .. }) {
             let _ = self.prime_with_avcc_extradata();
+        }
+    }
+
+    fn output_format(&self) -> VideoOutputFormat {
+        match self.opts.output_format {
+            VideoOutputFormat::Nv12 => VideoOutputFormat::Nv12,
+            _ => VideoOutputFormat::Yuv420,
         }
     }
 }

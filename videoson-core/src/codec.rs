@@ -20,6 +20,7 @@ pub enum CodecType {
 pub enum PixelFormat {
     Gray,
     Yuv420,
+    Nv12,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -27,6 +28,7 @@ pub enum PixelFormat {
 pub enum VideoFramePlanes {
     Mono,
     Yuv420,
+    Nv12,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -34,6 +36,14 @@ pub enum VideoFramePlanes {
 pub enum NalFormat {
     AnnexB,
     Avcc { nal_len_size: u8 },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum VideoOutputFormat {
+    #[default]
+    Native,
+    Yuv420,
+    Nv12,
 }
 
 #[derive(Debug, Clone)]
@@ -60,11 +70,15 @@ impl VideoCodecParams {
 #[derive(Debug, Clone, Copy)]
 pub struct VideoDecoderOptions {
     pub verify: bool,
+    pub output_format: VideoOutputFormat,
 }
 
 impl Default for VideoDecoderOptions {
     fn default() -> Self {
-        Self { verify: false }
+        Self {
+            verify: false,
+            output_format: VideoOutputFormat::Native,
+        }
     }
 }
 
@@ -85,4 +99,8 @@ pub trait VideoDecoder {
     }
 
     fn reset(&mut self);
+
+    fn output_format(&self) -> VideoOutputFormat {
+        VideoOutputFormat::Native
+    }
 }
