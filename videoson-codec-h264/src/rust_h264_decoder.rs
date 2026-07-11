@@ -4,10 +4,9 @@
 
 extern crate alloc;
 
-use alloc::collections::{BinaryHeap, VecDeque};
+use alloc::collections::VecDeque;
 use alloc::string::ToString;
 use alloc::vec::Vec;
-use core::cmp::Reverse;
 
 use rust_h264::decoder::OrderedDecoder as Inner;
 use rust_h264::nal::{parse_annex_b, parse_avcc, parse_avcc_config, NalUnit};
@@ -24,7 +23,8 @@ pub struct RustH264Decoder {
     avcc_length_size: Option<usize>,
     dec: Inner,
     out: VecDeque<VideoFrame>,
-    pts_queue: BinaryHeap<Reverse<i64>>,
+    pts_queue: VecDeque<i64>,
+    last_packet_pts: Option<i64>,
 }
 
 impl RustH264Decoder {
@@ -44,11 +44,13 @@ impl RustH264Decoder {
             return;
         }
         let y_visible = &f.y[..w * h];
-        let frame_pts = self.pts_queue.pop().map(|Reverse(pts)| pts);
+        let frame_pts = self.pts_queue.pop_front().or(self.last_packet_pts);
 
         // rust_h264 may leave empty/zero chroma for mono.
+        let cw_m = (w + 1) / 2;
+        let ch_m = (h + 1) / 2;
         let is_mono = f.u.is_empty()
-            || (f.u.len() <= (w / 2) * (h / 2)
+            || (f.u.len() <= cw_m * ch_m
                 && f.u.iter().all(|&b| b == 0)
                 && f.v.iter().all(|&b| b == 0));
 
@@ -60,8 +62,8 @@ impl RustH264Decoder {
             return;
         }
 
-        let cw = w / 2;
-        let ch = h / 2;
+        let cw = (w + 1) / 2;
+        let ch = (h + 1) / 2;
         let u_visible = if f.u.len() >= cw * ch {
             &f.u[..cw * ch]
         } else {
@@ -157,7 +159,8 @@ impl VideoDecoder for RustH264Decoder {
             avcc_length_size: None,
             dec: Inner::new(),
             out: VecDeque::new(),
-            pts_queue: BinaryHeap::new(),
+            pts_queue: VecDeque::new(),
+            last_packet_pts: None,
         };
 
         if matches!(me.nal_format, NalFormat::Avcc { .. }) {
@@ -173,7 +176,8 @@ impl VideoDecoder for RustH264Decoder {
 
     fn send_packet(&mut self, packet: &Packet) -> Result<()> {
         if let Some(pts) = packet.pts {
-            self.pts_queue.push(Reverse(pts));
+            self.pts_queue.push_back(pts);
+            self.last_packet_pts = Some(pts);
         }
 
         let nals = self.parse_packet_nals(&packet.data);
@@ -198,6 +202,7 @@ impl VideoDecoder for RustH264Decoder {
         self.dec = Inner::new();
         self.out.clear();
         self.pts_queue.clear();
+        self.last_packet_pts = None;
         self.avcc_length_size = None;
 
         if matches!(self.nal_format, NalFormat::Avcc { .. }) {
