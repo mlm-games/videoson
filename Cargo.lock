@@ -225,6 +225,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "oxideav-vp8"
+version = "0.2.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "043a9d81b6c0cb1d7abb3653c53a8463063637836ed469f260bb4cc60f7ab917"
+
+[[package]]
 name = "parking_lot"
 version = "0.12.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -424,6 +430,7 @@ dependencies = [
  "less-avc",
  "videoson-codec-h264",
  "videoson-codec-h265",
+ "videoson-codec-vp8",
  "videoson-core",
  "videoson-format-ivf",
 ]
@@ -447,6 +454,7 @@ dependencies = [
  "videoson-codec-h264",
  "videoson-codec-h265",
  "videoson-codec-rav1d",
+ "videoson-codec-vp8",
  "videoson-common",
  "videoson-core",
  "videoson-format-ivf",
@@ -475,6 +483,15 @@ name = "videoson-codec-rav1d"
 version = "0.2.0"
 dependencies = [
  "rav1d-safe",
+ "videoson-core",
+]
+
+[[package]]
+name = "videoson-codec-vp8"
+version = "0.2.0"
+dependencies = [
+ "oxideav-vp8",
+ "videoson-common",
  "videoson-core",
 ]
 
