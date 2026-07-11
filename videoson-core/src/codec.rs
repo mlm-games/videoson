@@ -21,6 +21,7 @@ pub enum PixelFormat {
     Gray,
     Yuv420,
     Nv12,
+    P010,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -29,6 +30,7 @@ pub enum VideoFramePlanes {
     Mono,
     Yuv420,
     Nv12,
+    P010,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -44,6 +46,7 @@ pub enum VideoOutputFormat {
     Native,
     Yuv420,
     Nv12,
+    P010,
 }
 
 #[derive(Debug, Clone)]

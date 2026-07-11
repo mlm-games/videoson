@@ -136,6 +136,35 @@ impl VideoFrame {
             color_info: ColorInfo::default(),
         }
     }
+
+    pub fn new_p010_u16(
+        width: u32,
+        height: u32,
+        y_stride: usize,
+        uv_stride: usize,
+        y: Vec<u16>,
+        uv: Vec<u16>,
+    ) -> Self {
+        Self {
+            width,
+            height,
+            planes: VideoFramePlanes::P010,
+            pixfmt: PixelFormat::P010,
+            bit_depth: 10,
+            pts: None,
+            plane_data: vec![
+                VideoPlane {
+                    stride: y_stride,
+                    data: PlaneData::U16(y),
+                },
+                VideoPlane {
+                    stride: uv_stride,
+                    data: PlaneData::U16(uv),
+                },
+            ],
+            color_info: ColorInfo::default(),
+        }
+    }
 }
 
 pub fn interleave_uv_nv12(
@@ -156,4 +185,17 @@ pub fn interleave_uv_nv12(
         }
     }
     uv
+}
+
+/// Copy `height` rows of `width` bytes from a strided source into a
+/// tightly-packed `Vec`. When `stride == width`, this is a single clone.
+pub fn tight_pack_plane(src: &[u8], stride: usize, width: usize, height: usize) -> Vec<u8> {
+    if stride == width {
+        return src[..width * height].to_vec();
+    }
+    let mut out = Vec::with_capacity(width * height);
+    for row in 0..height {
+        out.extend_from_slice(&src[row * stride..row * stride + width]);
+    }
+    out
 }

@@ -6,7 +6,7 @@ pub use videoson_core::{
     CodecRegistry, CodecType, ColorInfo, NalFormat, Packet, PixelFormat, PlaneData,
     RegisterableVideoDecoder, Result, SupportedVideoCodec, VideoCodecParams, VideoDecoder,
     VideoDecoderOptions, VideoFrame, VideoFramePlanes, VideoOutputFormat, VideoPlane,
-    VideosonError,
+    VideosonError, interleave_uv_nv12, tight_pack_plane,
 };
 
 #[cfg(feature = "h264")]
@@ -42,6 +42,6 @@ pub fn default_registry() -> CodecRegistry {
 pub mod prelude {
     pub use videoson_core::{
         CodecRegistry, CodecType, Packet, PixelFormat, Result, VideoCodecParams, VideoDecoder,
-        VideoDecoderOptions, VideoFrame, VideosonError,
+        VideoDecoderOptions, VideoFrame, VideoOutputFormat, VideosonError,
     };
 }
