@@ -10,6 +10,7 @@ default = ["h264", "rav1d", "ivf"]
 h264 = ["dep:videoson-codec-h264"]
 h265 = ["dep:videoson-codec-h265"]
 vp8 = ["dep:videoson-codec-vp8"]
+vp9 = ["dep:videoson-codec-vp9"]
 rav1d = ["dep:videoson-codec-rav1d"]
 ivf = ["dep:videoson-format-ivf"]
 
@@ -20,4 +21,5 @@ videoson-format-ivf = { path = "../videoson-format-ivf", optional = true }
 videoson-codec-h264 = { path = "../videoson-codec-h264", optional = true }
 videoson-codec-h265 = { path = "../videoson-codec-h265", optional = true }
 videoson-codec-vp8 = { path = "../videoson-codec-vp8", optional = true }
+videoson-codec-vp9 = { path = "../videoson-codec-vp9", optional = true }
 videoson-codec-rav1d = { path = "../videoson-codec-rav1d", optional = true }

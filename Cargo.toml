@@ -7,6 +7,7 @@ members = [
   "videoson-codec-h264",
   "videoson-codec-h265",
   "videoson-codec-vp8",
+  "videoson-codec-vp9",
   "videoson-codec-rav1d",
   "videoson-format-ivf",
   "testbench",
@@ -23,3 +24,4 @@ videoson-core = { path = "videoson-core", version = "0.0.0" }
 videoson-common = { path = "videoson-common", version = "0.0.0" }
 rust_h264 = { version = "0.4.0" }
 rust_h265 = { version = "0.1.0" }
+oxideav-vp9 = { git = "https://github.com/OxideAV/oxideav-vp9", default-features = false }

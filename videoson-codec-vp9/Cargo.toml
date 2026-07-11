@@ -1,0 +1,16 @@
+[package]
+name = "videoson-codec-vp9"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[features]
+default = ["std"]
+std = ["videoson-core/std", "videoson-common/std"]
+
+[dependencies]
+videoson-core = { path = "../videoson-core", default-features = false }
+videoson-common = { path = "../videoson-common", default-features = false }
+
+oxideav-vp9 = { git = "https://github.com/OxideAV/oxideav-vp9", default-features = false }
