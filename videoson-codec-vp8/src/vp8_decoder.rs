@@ -96,7 +96,8 @@ impl VideoDecoder for Vp8Decoder {
     fn output_format(&self) -> VideoOutputFormat {
         match self.opts.output_format {
             VideoOutputFormat::Nv12 => VideoOutputFormat::Nv12,
-            _ => VideoOutputFormat::Yuv420,
+            VideoOutputFormat::Native | VideoOutputFormat::Yuv420 => VideoOutputFormat::Yuv420,
+            VideoOutputFormat::P010 => VideoOutputFormat::Yuv420,
         }
     }
 }

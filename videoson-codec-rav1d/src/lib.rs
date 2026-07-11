@@ -20,6 +20,13 @@ impl VideoDecoder for Rav1dSafeDecoder {
         if params.codec != CodecType::AV1 {
             return Err(VideosonError::InvalidData("not AV1"));
         }
+
+        if matches!(opts.output_format, VideoOutputFormat::P010) {
+            return Err(VideosonError::Unsupported(
+                "P010 output is not supported for AV1",
+            ));
+        }
+
         let decoder =
             Decoder::new().map_err(|e| VideosonError::Message(format!("rav1d init: {e}")))?;
         Ok(Self {
@@ -78,7 +85,8 @@ impl VideoDecoder for Rav1dSafeDecoder {
     fn output_format(&self) -> VideoOutputFormat {
         match self.opts.output_format {
             VideoOutputFormat::Nv12 => VideoOutputFormat::Nv12,
-            _ => VideoOutputFormat::Yuv420,
+            VideoOutputFormat::Native | VideoOutputFormat::Yuv420 => VideoOutputFormat::Yuv420,
+            VideoOutputFormat::P010 => VideoOutputFormat::Yuv420,
         }
     }
 }

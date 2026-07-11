@@ -342,7 +342,7 @@ impl VideoDecoder for RustH265Decoder {
         match self.opts.output_format {
             VideoOutputFormat::P010 => VideoOutputFormat::P010,
             VideoOutputFormat::Nv12 => VideoOutputFormat::Nv12,
-            _ => VideoOutputFormat::Yuv420,
+            VideoOutputFormat::Native | VideoOutputFormat::Yuv420 => VideoOutputFormat::Yuv420,
         }
     }
 }

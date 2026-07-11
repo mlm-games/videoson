@@ -150,6 +150,12 @@ impl VideoDecoder for RustH264Decoder {
             return Err(VideosonError::InvalidData("params.codec is not H264"));
         }
 
+        if matches!(opts.output_format, VideoOutputFormat::P010) {
+            return Err(VideosonError::Unsupported(
+                "P010 output is not supported for H.264",
+            ));
+        }
+
         let nal_format = params.nal_format.unwrap_or(NalFormat::AnnexB);
 
         let mut me = Self {
@@ -213,7 +219,8 @@ impl VideoDecoder for RustH264Decoder {
     fn output_format(&self) -> VideoOutputFormat {
         match self.opts.output_format {
             VideoOutputFormat::Nv12 => VideoOutputFormat::Nv12,
-            _ => VideoOutputFormat::Yuv420,
+            VideoOutputFormat::Native | VideoOutputFormat::Yuv420 => VideoOutputFormat::Yuv420,
+            VideoOutputFormat::P010 => VideoOutputFormat::Yuv420,
         }
     }
 }
