@@ -9,7 +9,7 @@ A Rust video decode wrapper, with it's workspace design being inspired by Sympho
 | `videoson-core` | Core traits and types: `VideoDecoder`, `Demuxer`, `Packet`, `VideoFrame`, `CodecRegistry` |
 | `videoson-common` | Bitstream utilities: Annex B, avcC, RBSP, Exp-Golomb, BitReader |
 | `videoson-format-ivf` | IVF demuxer/header parser |
-| `videoson-codec-*` | decoder crates (wraps crates below mentioned, Apache/MIT) |
+| `videoson-codec-*` | decoder crates (wraps crates mentioned below, Apache/MIT) |
 | `videoson-codec-rav1d` | AV1 decoder (wraps `rav1d-safe`, GPLv3) |
 | `videoson` | Facade crate with pre-populated registry |
 
