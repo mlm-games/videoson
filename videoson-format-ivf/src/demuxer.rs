@@ -30,8 +30,7 @@ impl IvfDemuxer {
         codec_params.coded_width = file_header.width as u32;
         codec_params.coded_height = file_header.height as u32;
 
-        let time_base =
-            TimeBase::new(file_header.fps_den, file_header.fps_num.max(1));
+        let time_base = TimeBase::new(file_header.fps_den, file_header.fps_num.max(1));
 
         let tracks = vec![videoson_core::Track {
             id: 0,

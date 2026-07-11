@@ -9,11 +9,11 @@ use alloc::string::ToString;
 use alloc::vec::Vec;
 
 use rust_h264::decoder::OrderedDecoder as Inner;
-use rust_h264::nal::{parse_annex_b, parse_avcc, parse_avcc_config, NalUnit};
+use rust_h264::nal::{NalUnit, parse_annex_b, parse_avcc, parse_avcc_config};
 
 use videoson_core::{
-    interleave_uv_nv12, CodecType, NalFormat, Packet, Result, VideoCodecParams, VideoDecoder,
-    VideoDecoderOptions, VideoFrame, VideoOutputFormat, VideosonError,
+    CodecType, NalFormat, Packet, Result, VideoCodecParams, VideoDecoder, VideoDecoderOptions,
+    VideoFrame, VideoOutputFormat, VideosonError, interleave_uv_nv12,
 };
 
 pub struct RustH264Decoder {

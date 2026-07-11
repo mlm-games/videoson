@@ -77,7 +77,10 @@ fn decode_h265_sao() -> Result<()> {
 
 #[test]
 fn decode_h265_10bit() -> Result<()> {
-    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/samples/10bit_128x128.h265");
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/samples/10bit_128x128.h265"
+    );
     let data = std::fs::read(path)?;
     let frames = decode_h265_annexb(&data)?;
     assert!(!frames.is_empty(), "expected at least 1 frame from 10bit");

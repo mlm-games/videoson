@@ -5,8 +5,8 @@ use alloc::collections::VecDeque;
 use oxideav_vp8::state::Vp8DecoderState;
 
 use videoson_core::{
-    interleave_uv_nv12, CodecType, Packet, Result, VideoCodecParams, VideoDecoder,
-    VideoDecoderOptions, VideoFrame, VideoOutputFormat, VideosonError,
+    CodecType, Packet, Result, VideoCodecParams, VideoDecoder, VideoDecoderOptions, VideoFrame,
+    VideoOutputFormat, VideosonError, interleave_uv_nv12,
 };
 
 pub struct Vp8Decoder {
@@ -30,8 +30,7 @@ impl Vp8Decoder {
         if self.wants_nv12() {
             let uv = interleave_uv_nv12(&f.u, cw, &f.v, cw, cw, ch);
             self.queued.push_back(
-                VideoFrame::new_nv12_u8(f.width, f.height, w, cw * 2, f.y, uv)
-                    .with_pts(pts),
+                VideoFrame::new_nv12_u8(f.width, f.height, w, cw * 2, f.y, uv).with_pts(pts),
             );
         } else {
             self.queued.push_back(

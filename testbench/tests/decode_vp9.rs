@@ -1,9 +1,7 @@
 use anyhow::Result;
 
 use videoson_codec_vp9::Vp9Decoder;
-use videoson_core::{
-    Demuxer, PixelFormat, VideoDecoder, VideoDecoderOptions,
-};
+use videoson_core::{Demuxer, PixelFormat, VideoDecoder, VideoDecoderOptions};
 use videoson_format_ivf::IvfDemuxer;
 
 fn decode_vp9_ivf(data: &[u8]) -> Result<Vec<videoson_core::VideoFrame>> {
@@ -42,7 +40,12 @@ fn decode_vp9_from_ivf() -> Result<()> {
         assert!(frame.height > 0);
     }
 
-    println!("Decoded {} VP9 frames ({}x{})", frames.len(), frames[0].width, frames[0].height);
+    println!(
+        "Decoded {} VP9 frames ({}x{})",
+        frames.len(),
+        frames[0].width,
+        frames[0].height
+    );
     Ok(())
 }
 

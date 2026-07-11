@@ -4,12 +4,12 @@ use alloc::collections::VecDeque;
 use alloc::vec;
 use alloc::vec::Vec;
 
-use oxideav_vp9::{decode_vp9_sequence, split_superframe, Vp9DecodedFrame};
+use oxideav_vp9::{Vp9DecodedFrame, decode_vp9_sequence, split_superframe};
 
 use videoson_core::{
-    interleave_uv_nv12, CodecType, ColorInfo, Packet, PixelFormat, PlaneData, Result,
-    VideoCodecParams, VideoDecoder, VideoDecoderOptions, VideoFrame, VideoFramePlanes, VideoPlane,
-    VideoOutputFormat, VideosonError,
+    CodecType, ColorInfo, Packet, PixelFormat, PlaneData, Result, VideoCodecParams, VideoDecoder,
+    VideoDecoderOptions, VideoFrame, VideoFramePlanes, VideoOutputFormat, VideoPlane,
+    VideosonError, interleave_uv_nv12,
 };
 
 struct BufferedPacket {
@@ -45,11 +45,12 @@ fn convert_frame(
 
         if opts.output_format == VideoOutputFormat::Nv12 {
             let uv = interleave_uv_nv12(&u_data, cw, &v_data, cw, cw, ch);
-            Ok(VideoFrame::new_nv12_u8(f.width, f.height, w, cw * 2, y, uv)
-                .with_pts(pts))
+            Ok(VideoFrame::new_nv12_u8(f.width, f.height, w, cw * 2, y, uv).with_pts(pts))
         } else {
-            Ok(VideoFrame::new_yuv420_u8(f.width, f.height, w, cw, cw, y, u_data, v_data)
-                .with_pts(pts))
+            Ok(
+                VideoFrame::new_yuv420_u8(f.width, f.height, w, cw, cw, y, u_data, v_data)
+                    .with_pts(pts),
+            )
         }
     } else {
         Ok(VideoFrame {
@@ -60,7 +61,10 @@ fn convert_frame(
             bit_depth: f.bit_depth,
             pts,
             plane_data: vec![
-                VideoPlane { stride: w, data: PlaneData::U16(f.y) },
+                VideoPlane {
+                    stride: w,
+                    data: PlaneData::U16(f.y),
+                },
                 VideoPlane {
                     stride: cw,
                     data: PlaneData::U16(f.u),

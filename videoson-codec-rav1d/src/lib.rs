@@ -2,9 +2,9 @@ use std::collections::VecDeque;
 
 use rav1d_safe::{Decoder, Frame, Planes};
 use videoson_core::{
-    interleave_uv_nv12, CodecType, Packet, RegisterableVideoDecoder, Result, SupportedVideoCodec,
-    VideoCodecParams, VideoDecoder, VideoDecoderOptions, VideoFrame, VideoOutputFormat,
-    VideosonError,
+    CodecType, Packet, RegisterableVideoDecoder, Result, SupportedVideoCodec, VideoCodecParams,
+    VideoDecoder, VideoDecoderOptions, VideoFrame, VideoOutputFormat, VideosonError,
+    interleave_uv_nv12,
 };
 
 pub struct Rav1dSafeDecoder {

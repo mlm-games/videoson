@@ -5,14 +5,14 @@ use alloc::collections::VecDeque;
 use alloc::vec::Vec;
 use core::cmp::Ordering;
 
-use rust_h265::{Decoder, NalUnitType, NalUnit, parse_annex_b};
+use rust_h265::{Decoder, NalUnit, NalUnitType, parse_annex_b};
 
 use videoson_common::parse_hvcc_extradata;
 
 use videoson_core::{
-    interleave_uv_nv12, CodecType, NalFormat, Packet, PixelFormat, Result, VideoCodecParams,
-    VideoDecoder, VideoDecoderOptions, VideoFrame, VideoFramePlanes, VideoOutputFormat,
-    VideosonError, VideoPlane, PlaneData, ColorInfo,
+    CodecType, ColorInfo, NalFormat, Packet, PixelFormat, PlaneData, Result, VideoCodecParams,
+    VideoDecoder, VideoDecoderOptions, VideoFrame, VideoFramePlanes, VideoOutputFormat, VideoPlane,
+    VideosonError, interleave_uv_nv12,
 };
 
 fn parse_nal(nal_data: &[u8]) -> Option<NalUnit<'_>> {
@@ -188,9 +188,18 @@ impl RustH265Decoder {
                 bit_depth: bd,
                 pts: None,
                 plane_data: alloc::vec![
-                    VideoPlane { stride: w, data: PlaneData::U16(y) },
-                    VideoPlane { stride: cw, data: PlaneData::U16(u) },
-                    VideoPlane { stride: cw, data: PlaneData::U16(v) },
+                    VideoPlane {
+                        stride: w,
+                        data: PlaneData::U16(y)
+                    },
+                    VideoPlane {
+                        stride: cw,
+                        data: PlaneData::U16(u)
+                    },
+                    VideoPlane {
+                        stride: cw,
+                        data: PlaneData::U16(v)
+                    },
                 ],
                 color_info: ColorInfo::default(),
             }
@@ -198,11 +207,9 @@ impl RustH265Decoder {
     }
 
     fn flush_pending(&mut self) {
-        self.pending.sort_by(|a, b| {
-            match a.gop.cmp(&b.gop) {
-                Ordering::Equal => a.poc.cmp(&b.poc),
-                other => other,
-            }
+        self.pending.sort_by(|a, b| match a.gop.cmp(&b.gop) {
+            Ordering::Equal => a.poc.cmp(&b.poc),
+            other => other,
         });
         for ordered in self.pending.drain(..) {
             self.queued.push_back(ordered.frame);

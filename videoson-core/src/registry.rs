@@ -1,7 +1,7 @@
 extern crate alloc;
 
-use alloc::vec::Vec;
 use alloc::boxed::Box;
+use alloc::vec::Vec;
 
 use crate::{CodecType, Result, VideoCodecParams, VideoDecoder, VideoDecoderOptions};
 
