@@ -14,7 +14,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.3.0"
+version = "0.4.0"
 edition = "2024"
 license = "LGPL-2.1"
 rust-version = "1.93"
@@ -23,7 +23,7 @@ rust-version = "1.93"
 videoson-core = { path = "videoson-core", version = "=0.3.0", default-features = false }
 videoson-common = { path = "videoson-common", version = "=0.3.0", default-features = false }
 rust_h264 = { version = "0.4.0" }
-rust_h265 = { path = "../rust_h265" }
+rust_h265 = { git = "https://github.com/mlm-games/rust_h265" }
 # rust_h265 = { version = "=0.1.0" }
 oxideav-vp9 = { git = "https://github.com/OxideAV/oxideav-vp9", rev = "50360260bc9aded0d6b47144de580f1e28a32220", default-features = false }
 oxideav-bitstream = { git = "https://github.com/OxideAV/oxideav-bitstream", default-features = false }

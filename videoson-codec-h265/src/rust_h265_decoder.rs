@@ -1,5 +1,17 @@
 extern crate alloc;
 
+#[cfg(feature = "std")]
+extern crate std;
+
+#[cfg(feature = "std")]
+macro_rules! dbg_log {
+    ($($arg:tt)*) => { std::eprintln!($($arg)*); };
+}
+#[cfg(not(feature = "std"))]
+macro_rules! dbg_log {
+    ($($arg:tt)*) => {};
+}
+
 use alloc::borrow::Cow;
 use alloc::collections::VecDeque;
 use alloc::vec::Vec;
@@ -102,6 +114,10 @@ pub struct RustH265Decoder {
     gop_count: u32,
     in_irap_picture: bool,
     hvcc_length_size: Option<u8>,
+    pending_pts: Option<i64>,
+    /// Frame duration in microseconds, used to recompute PTS from POC.
+    /// 0 means "not set" (fall back to container PTS).
+    frame_duration_us: u64,
 }
 
 impl RustH265Decoder {
@@ -131,22 +147,11 @@ impl RustH265Decoder {
     }
 
     fn flush_ready_frames(&mut self) {
-        if self.pending.len() <= 1 {
+        if self.pending.is_empty() {
             return;
         }
         self.pending.sort_by(|a, b| a.poc.cmp(&b.poc));
-        let max_poc = self.pending.last().unwrap().poc;
-        let mut ready = Vec::new();
-        let mut remaining = Vec::new();
-        for f in self.pending.drain(..) {
-            if f.poc < max_poc {
-                ready.push(f);
-            } else {
-                remaining.push(f);
-            }
-        }
-        self.pending = remaining;
-        for ordered in ready {
+        for ordered in self.pending.drain(..) {
             self.queued.push_back(ordered.frame);
         }
     }
@@ -162,13 +167,21 @@ impl RustH265Decoder {
     }
 
     fn push_frame(&mut self, f: rust_h265::decoder::Frame, poc: i32, pts: Option<i64>) -> Result<()> {
+        // Correct PTS from POC when frame_duration_us is available.
+        // This fixes mis-muxed files where the container PTS assumes B-frame
+        // reordering but the bitstream has no B-frames (POC is sequential).
+        let pts = if self.frame_duration_us > 0 {
+            Some(poc as i64 * self.frame_duration_us as i64 * 1000)
+        } else {
+            pts
+        };
         let w = f.width as usize;
         let h = f.height as usize;
         let cw = (w + 1) / 2;
         let ch = (h + 1) / 2;
         let bd = f.bit_depth;
 
-        let frame: VideoFrame = match bd {
+        let mut frame: VideoFrame = match bd {
             8 => self.make_frame_u8(f, w, h, cw, ch, pts)?,
             10 | 12 => self.make_frame_u16(f, w, h, cw, ch, bd, pts)?,
             _ => {
@@ -177,6 +190,7 @@ impl RustH265Decoder {
                 ))
             }
         };
+        frame.poc = Some(poc);
 
         let gop = self.gop_count;
         self.pending.push(OrderedFrame { gop, poc, frame });
@@ -262,33 +276,47 @@ impl RustH265Decoder {
     fn feed_nal(&mut self, nal: &NalUnit<'_>, pts: Option<i64>) -> Result<()> {
         let is_irap = nal.nal_unit_type.is_irap();
 
-        match self.dec.decode_nal(nal) {
-            Ok(Some(frame)) => {
-                let poc = frame.pic_order_cnt;
-                self.push_frame(frame, poc, pts)?;
-            }
-            Ok(None) => {}
-            Err(e) => return Err(Self::map_err(e)),
-        }
-
-        // Continuous flush: emit all pending frames except the one with the
-        // highest POC.  This ensures frames flow with minimal latency while
-        // maintaining correct POC order — the max-POC frame is held back as
-        // a potential reference until the next decode produces a higher POC.
-        self.flush_ready_frames();
-
-        // GOP boundary detection: IRAP pictures (IDR, BLA, CRA) start a new
-        // GOP.  The in_irap_picture guard prevents double-flushing for
-        // multi-slice IRAP access units where all slices share the same NAL
-        // unit type — only the first slice triggers the flush.
+        // GOP boundary detection: MUST run before decode_nal so that the
+        // IRAP frame (returned by decode_nal) gets the new GOP count.
+        // Otherwise flush_ready_frames mixes frames from different GOPs,
+        // causing the new IRAP (POC=0) to be emitted before the old GOP's
+        // held-back max-POC frame — visible as wrong-frame-order stutter.
         if is_irap && !self.in_irap_picture {
             if self.pending.iter().any(|f| f.gop == self.gop_count) {
                 self.flush_pending_for_gop(self.gop_count);
             }
             self.gop_count += 1;
             self.in_irap_picture = true;
-        } else if nal.nal_unit_type.is_vcl() && !is_irap {
+        }
+
+        self.dec.set_pending_pts(pts);
+
+        let dec_result = self.dec.decode_nal(nal);
+        match dec_result {
+            Ok(Some(frame)) => {
+                let poc = frame.pic_order_cnt;
+                let frame_pts = frame.pts;
+                self.push_frame(frame, poc, frame_pts)?;
+            }
+            Ok(None) => {}
+            Err(e) => return Err(Self::map_err(e)),
+        }
+
+        // Continuous flush: emit all pending frames except the one with the
+        // highest POC.  After the GOP handler above, pending only contains
+        // frames from the current GOP, so the max-POC frame is always from
+        // the correct GOP.
+        self.flush_ready_frames();
+
+        // Clear the IRAP guard on the first non-IRAP VCL NAL.
+        if nal.nal_unit_type.is_vcl() && !is_irap {
             self.in_irap_picture = false;
+        }
+
+        // Track PTS for the picture currently being decoded.
+        // Used by send_eos to attach the correct PTS to the flushed frame.
+        if nal.nal_unit_type.is_vcl() {
+            self.pending_pts = pts;
         }
 
         Ok(())
@@ -361,6 +389,8 @@ impl VideoDecoder for RustH265Decoder {
             gop_count: 0,
             in_irap_picture: false,
             hvcc_length_size: None,
+            pending_pts: None,
+            frame_duration_us: 0,
         };
 
         if matches!(me.nal_format, NalFormat::Hvcc { .. }) {
@@ -388,9 +418,10 @@ impl VideoDecoder for RustH265Decoder {
     }
 
     fn send_eos(&mut self) -> Result<()> {
-        if let Some(frame) = self.dec.flush() {
+        while let Some(frame) = self.dec.flush() {
             let poc = frame.pic_order_cnt;
-            self.push_frame(frame, poc, None)?;
+            let frame_pts = frame.pts;
+            self.push_frame(frame, poc, frame_pts)?;
         }
         self.drain_all_pending();
         Ok(())
@@ -403,6 +434,8 @@ impl VideoDecoder for RustH265Decoder {
         self.gop_count = 0;
         self.in_irap_picture = false;
         self.hvcc_length_size = None;
+        self.pending_pts = None;
+        self.frame_duration_us = 0;
 
         if matches!(self.nal_format, NalFormat::Hvcc { .. }) {
             self.prime_with_hvcc_extradata()?;
@@ -417,5 +450,9 @@ impl VideoDecoder for RustH265Decoder {
             VideoOutputFormat::Nv12 => VideoOutputFormat::Nv12,
             VideoOutputFormat::Native | VideoOutputFormat::Yuv420 => VideoOutputFormat::Yuv420,
         }
+    }
+
+    fn set_frame_duration_micros(&mut self, us: u64) {
+        self.frame_duration_us = us;
     }
 }

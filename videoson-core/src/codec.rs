@@ -115,6 +115,11 @@ pub trait VideoDecoder {
         Ok(())
     }
 
+    /// Set frame duration in microseconds for POC-based PTS re-computation.
+    /// Default is no-op; decoders that support POC (e.g. H.265) override
+    /// this to correct PTS when the container PTS is mis-muxed.
+    fn set_frame_duration_micros(&mut self, _us: u64) {}
+
     /// Returns the output format the caller requested via `VideoDecoderOptions`.
     ///
     /// This reflects the *requested* format, which the decoder will honour

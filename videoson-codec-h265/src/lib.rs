@@ -2,6 +2,9 @@
 
 extern crate alloc;
 
+#[cfg(feature = "std")]
+extern crate std;
+
 mod rust_h265_decoder;
 
 pub use rust_h265_decoder::RustH265Decoder;

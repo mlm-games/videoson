@@ -386,6 +386,7 @@ checksum = "fbedf5e104105e8783a77926f1e212ea37e78fd3b38b2c928938a283d083d6f1"
 [[package]]
 name = "rust_h265"
 version = "0.1.0"
+source = "git+https://github.com/mlm-games/rust_h265#1d88bd0818c3376563cb15c11d84260b4b464874"
 
 [[package]]
 name = "safe_unaligned_simd"

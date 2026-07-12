@@ -71,6 +71,9 @@ pub struct VideoFrame {
     pub pts: Option<i64>,
     pub plane_data: Vec<VideoPlane>,
     pub color_info: ColorInfo,
+    /// Picture Order Count (display order index).
+    /// Set by the H.265 decoder; `None` for other codecs.
+    pub poc: Option<i32>,
 }
 
 impl VideoFrame {
@@ -97,6 +100,7 @@ impl VideoFrame {
                 data: PlaneData::U8(y),
             }],
             color_info: ColorInfo::default(),
+            poc: None,
         }
     }
 
@@ -132,6 +136,7 @@ impl VideoFrame {
                 },
             ],
             color_info: ColorInfo::default(),
+            poc: None,
         }
     }
 
@@ -168,6 +173,7 @@ impl VideoFrame {
                 },
             ],
             color_info: ColorInfo::default(),
+            poc: None,
         }
     }
 
@@ -197,6 +203,7 @@ impl VideoFrame {
                 },
             ],
             color_info: ColorInfo::default(),
+            poc: None,
         }
     }
 
@@ -228,6 +235,7 @@ impl VideoFrame {
                 },
             ],
             color_info: ColorInfo::default(),
+            poc: None,
         }
     }
 }

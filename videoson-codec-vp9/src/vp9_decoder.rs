@@ -98,6 +98,7 @@ fn convert_frame(
                 },
             ],
             color_info: ColorInfo::default(),
+            poc: None,
         })
     }
 }
