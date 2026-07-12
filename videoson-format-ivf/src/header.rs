@@ -42,6 +42,7 @@ pub struct IvfFileHeader {
     pub fps_num: u32,
     pub fps_den: u32,
     pub frame_cnt: u32,
+    pub header_len: u16,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -67,9 +68,9 @@ impl IvfFileHeader {
                 "IVF: unsupported version",
             ));
         }
-        if header_len != 32 {
+        if header_len < 32 {
             return Err(videoson_core::VideosonError::InvalidData(
-                "IVF: unexpected header_len",
+                "IVF: header_len too small",
             ));
         }
 
@@ -87,6 +88,7 @@ impl IvfFileHeader {
             fps_num,
             fps_den,
             frame_cnt,
+            header_len,
         })
     }
 }

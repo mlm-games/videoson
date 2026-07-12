@@ -13,6 +13,7 @@ use videoson_core::{
 };
 
 struct OrderedFrame {
+    gop: u32,
     poc: i32,
     frame: VideoFrame,
 }
@@ -32,6 +33,7 @@ pub struct RustH264Decoder {
     dec: Inner,
     queued: VecDeque<VideoFrame>,
     pending: Vec<OrderedFrame>,
+    idr_count: u32,
     last_emitted_poc: Option<i32>,
     pending_pts: Option<i64>,
 }
@@ -45,12 +47,12 @@ impl RustH264Decoder {
         matches!(self.opts.output_format, VideoOutputFormat::Nv12)
     }
 
-    fn push_frame(&mut self, f: rust_h264::decoder::Frame, pts: Option<i64>) {
+    fn push_frame(&mut self, f: rust_h264::decoder::Frame, pts: Option<i64>) -> Result<()> {
         let w = f.width as usize;
         let h = f.height as usize;
 
         if f.y.len() < w * h {
-            return;
+            return Ok(());
         }
         let y_visible = &f.y[..w * h];
         let poc = f.pic_order_cnt;
@@ -73,10 +75,7 @@ impl RustH264Decoder {
             };
 
             if self.wants_nv12() {
-                let uv = match interleave_uv_nv12(u_visible, cw, v_visible, cw, cw, ch) {
-                    Ok(uv) => uv,
-                    Err(_) => Vec::new(),
-                };
+                let uv = interleave_uv_nv12(u_visible, cw, v_visible, cw, cw, ch)?;
                 VideoFrame::new_nv12_u8(f.width, f.height, w, cw * 2, y_visible.to_vec(), uv)
                     .with_pts(pts)
             } else {
@@ -94,45 +93,81 @@ impl RustH264Decoder {
             }
         };
 
-        self.pending.push(OrderedFrame { poc, frame });
+        let gop = self.idr_count;
+        self.pending.push(OrderedFrame { gop, poc, frame });
         self.try_drain_pending();
+        Ok(())
     }
 
     fn try_drain_pending(&mut self) {
-        loop {
-            let expected = match self.last_emitted_poc {
-                None => 0,
-                Some(poc) => poc + 1,
-            };
+        if self.pending.is_empty() {
+            return;
+        }
+        self.pending.sort_by(|a, b| a.poc.cmp(&b.poc));
 
-            let pos = self.pending.iter().position(|f| f.poc == expected);
-            match pos {
-                Some(idx) => {
-                    let ordered = self.pending.remove(idx);
-                    self.last_emitted_poc = Some(ordered.poc);
-                    self.queued.push_back(ordered.frame);
-                }
-                None => break,
+        while !self.pending.is_empty() {
+            let next_poc = self.pending[0].poc;
+            let can_emit = match self.last_emitted_poc {
+                None => next_poc == 0,
+                Some(last) => next_poc > last,
+            };
+            if !can_emit {
+                break;
             }
+            let ordered = self.pending.remove(0);
+            self.last_emitted_poc = Some(ordered.poc);
+            self.queued.push_back(ordered.frame);
+        }
+    }
+
+    fn flush_pending_for_gop(&mut self, gop: u32) {
+        let mut gop_frames = Vec::new();
+        let mut remaining = Vec::new();
+        for f in self.pending.drain(..) {
+            if f.gop == gop {
+                gop_frames.push(f);
+            } else {
+                remaining.push(f);
+            }
+        }
+        self.pending = remaining;
+
+        gop_frames.sort_by(|a, b| a.poc.cmp(&b.poc));
+        for ordered in gop_frames {
+            self.queued.push_back(ordered.frame);
         }
     }
 
     fn drain_all_pending(&mut self) {
-        self.pending.sort_by(|a, b| a.poc.cmp(&b.poc));
+        self.pending.sort_by(|a, b| match a.gop.cmp(&b.gop) {
+            core::cmp::Ordering::Equal => a.poc.cmp(&b.poc),
+            other => other,
+        });
         for ordered in self.pending.drain(..) {
             self.queued.push_back(ordered.frame);
         }
     }
 
     fn feed_nal(&mut self, nal: &NalUnit<'_>, pts: Option<i64>) -> Result<()> {
+        let is_idr = matches!(nal.nal_unit_type, NalUnitType::SliceIdr);
+
         match self.dec.decode_nal(nal) {
             Ok(Some(frame)) => {
                 // frame is the PREVIOUS picture that just completed.
                 // Its PTS was stored in pending_pts when its first slice was fed.
-                self.push_frame(frame, self.pending_pts);
+                self.push_frame(frame, self.pending_pts)?;
             }
             Ok(None) => {}
             Err(e) => return Err(Self::map_err(e)),
+        }
+
+        if is_idr {
+            if self.idr_count > 0 {
+                let prev_gop = self.idr_count - 1;
+                self.flush_pending_for_gop(prev_gop);
+            }
+            self.idr_count += 1;
+            self.last_emitted_poc = None;
         }
 
         // Track PTS for the picture currently being decoded.
@@ -198,6 +233,7 @@ impl VideoDecoder for RustH264Decoder {
             dec: Inner::new(),
             queued: VecDeque::new(),
             pending: Vec::new(),
+            idr_count: 0,
             last_emitted_poc: None,
             pending_pts: None,
         };
@@ -228,7 +264,7 @@ impl VideoDecoder for RustH264Decoder {
     fn send_eos(&mut self) -> Result<()> {
         // Flush the last pending picture from the decoder
         if let Some(frame) = self.dec.flush() {
-            self.push_frame(frame, self.pending_pts);
+            self.push_frame(frame, self.pending_pts)?;
         }
         // Drain all remaining pending frames sorted by POC (display order)
         self.drain_all_pending();
@@ -239,6 +275,7 @@ impl VideoDecoder for RustH264Decoder {
         self.dec = Inner::new();
         self.queued.clear();
         self.pending.clear();
+        self.idr_count = 0;
         self.last_emitted_poc = None;
         self.pending_pts = None;
         self.avcc_length_size = None;

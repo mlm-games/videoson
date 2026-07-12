@@ -118,7 +118,7 @@ impl RustH265Decoder {
         matches!(self.opts.output_format, VideoOutputFormat::P010)
     }
 
-    fn push_frame(&mut self, f: rust_h265::decoder::Frame, pts: Option<i64>) {
+    fn push_frame(&mut self, f: rust_h265::decoder::Frame, pts: Option<i64>) -> Result<()> {
         let w = f.width as usize;
         let h = f.height as usize;
         let cw = (w + 1) / 2;
@@ -128,12 +128,13 @@ impl RustH265Decoder {
         let gop = self.idr_count;
 
         let frame: VideoFrame = match bd {
-            8 => self.make_frame_u8(f, w, h, cw, ch, pts),
-            10 | 12 => self.make_frame_u16(f, w, h, cw, ch, bd, pts),
-            _ => return,
+            8 => self.make_frame_u8(f, w, h, cw, ch, pts)?,
+            10 | 12 => self.make_frame_u16(f, w, h, cw, ch, bd, pts)?,
+            _ => return Ok(()),
         };
 
         self.pending.push(OrderedFrame { gop, poc, frame });
+        Ok(())
     }
 
     fn make_frame_u8(
@@ -144,19 +145,16 @@ impl RustH265Decoder {
         cw: usize,
         ch: usize,
         pts: Option<i64>,
-    ) -> VideoFrame {
+    ) -> Result<VideoFrame> {
         let y = f.y.as_u8().unwrap_or(&[]).to_vec();
         let u = f.u.as_u8().unwrap_or(&[]).to_vec();
         let v = f.v.as_u8().unwrap_or(&[]).to_vec();
 
         if self.wants_nv12() {
-            let uv = match interleave_uv_nv12(&u, cw, &v, cw, cw, ch) {
-                Ok(uv) => uv,
-                Err(_) => Vec::new(),
-            };
-            VideoFrame::new_nv12_u8(f.width, f.height, w, cw * 2, y, uv).with_pts(pts)
+            let uv = interleave_uv_nv12(&u, cw, &v, cw, cw, ch)?;
+            Ok(VideoFrame::new_nv12_u8(f.width, f.height, w, cw * 2, y, uv).with_pts(pts))
         } else {
-            VideoFrame::new_yuv420_u8(f.width, f.height, w, cw, cw, y, u, v).with_pts(pts)
+            Ok(VideoFrame::new_yuv420_u8(f.width, f.height, w, cw, cw, y, u, v).with_pts(pts))
         }
     }
 
@@ -169,7 +167,7 @@ impl RustH265Decoder {
         ch: usize,
         bd: u8,
         pts: Option<i64>,
-    ) -> VideoFrame {
+    ) -> Result<VideoFrame> {
         let y = f.y.as_u16().unwrap_or(&[]).to_vec();
         let u = f.u.as_u16().unwrap_or(&[]).to_vec();
         let v = f.v.as_u16().unwrap_or(&[]).to_vec();
@@ -183,9 +181,9 @@ impl RustH265Decoder {
                     uv.push(v.get(row * cw + col).copied().unwrap_or(0));
                 }
             }
-            VideoFrame::new_p010_u16(f.width, f.height, w, uv_stride, y, uv).with_pts(pts)
+            Ok(VideoFrame::new_p010_u16(f.width, f.height, w, uv_stride, y, uv).with_pts(pts))
         } else {
-            VideoFrame::new_yuv420_u16(f.width, f.height, w, cw, cw, y, u, v, bd).with_pts(pts)
+            Ok(VideoFrame::new_yuv420_u16(f.width, f.height, w, cw, cw, y, u, v, bd).with_pts(pts))
         }
     }
 
@@ -211,21 +209,23 @@ impl RustH265Decoder {
     }
 
     fn try_drain_pending(&mut self) {
-        loop {
-            let expected = match self.last_emitted_poc {
-                None => 0,
-                Some(poc) => poc + 1,
-            };
+        if self.pending.is_empty() {
+            return;
+        }
+        self.pending.sort_by(|a, b| a.poc.cmp(&b.poc));
 
-            let pos = self.pending.iter().position(|f| f.poc == expected);
-            match pos {
-                Some(idx) => {
-                    let ordered = self.pending.remove(idx);
-                    self.last_emitted_poc = Some(ordered.poc);
-                    self.queued.push_back(ordered.frame);
-                }
-                None => break,
+        while !self.pending.is_empty() {
+            let next_poc = self.pending[0].poc;
+            let can_emit = match self.last_emitted_poc {
+                None => next_poc == 0,
+                Some(last) => next_poc > last,
+            };
+            if !can_emit {
+                break;
             }
+            let ordered = self.pending.remove(0);
+            self.last_emitted_poc = Some(ordered.poc);
+            self.queued.push_back(ordered.frame);
         }
     }
 
@@ -234,7 +234,7 @@ impl RustH265Decoder {
 
         match self.dec.decode_nal(nal) {
             Ok(Some(frame)) => {
-                self.push_frame(frame, pts);
+                self.push_frame(frame, pts)?;
             }
             Ok(None) => {}
             Err(e) => return Err(Self::map_err(e)),
@@ -339,7 +339,7 @@ impl VideoDecoder for RustH265Decoder {
 
     fn send_eos(&mut self) -> Result<()> {
         if let Some(frame) = self.dec.flush() {
-            self.push_frame(frame, None);
+            self.push_frame(frame, None)?;
         }
 
         self.pending.sort_by(|a, b| match a.gop.cmp(&b.gop) {

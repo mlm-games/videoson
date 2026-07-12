@@ -5,6 +5,9 @@ edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
+[features]
+std = ["videoson-core/std"]
+
 [dependencies]
-videoson-core = { path = "../videoson-core" }
+videoson-core = { path = "../videoson-core", default-features = false }
 rav1d-safe = "0.5"
