@@ -1,5 +1,3 @@
-//! It emits from in decode order, the player using this should reorder them according to pts
-
 extern crate alloc;
 
 use alloc::borrow::Cow;
@@ -14,6 +12,12 @@ use videoson_core::{
     CodecType, NalFormat, Packet, Result, VideoCodecParams, VideoDecoder, VideoDecoderOptions,
     VideoFrame, VideoOutputFormat, VideosonError, interleave_uv_nv12,
 };
+
+struct OrderedFrame {
+    gop: u32,
+    poc: i32,
+    frame: VideoFrame,
+}
 
 fn parse_nal(nal_data: &[u8]) -> Option<NalUnit<'_>> {
     if nal_data.len() < 2 {
@@ -94,6 +98,9 @@ pub struct RustH265Decoder {
     nal_format: NalFormat,
     dec: Decoder,
     queued: VecDeque<VideoFrame>,
+    pending: Vec<OrderedFrame>,
+    gop_count: u32,
+    in_irap_picture: bool,
     hvcc_length_size: Option<u8>,
 }
 
@@ -106,11 +113,34 @@ impl RustH265Decoder {
         matches!(self.opts.output_format, VideoOutputFormat::Nv12)
     }
 
-    fn wants_p010(&self) -> bool {
-        matches!(self.opts.output_format, VideoOutputFormat::P010)
+    fn flush_pending_for_gop(&mut self, gop: u32) {
+        let mut gop_frames = Vec::new();
+        let mut remaining = Vec::new();
+        for f in self.pending.drain(..) {
+            if f.gop == gop {
+                gop_frames.push(f);
+            } else {
+                remaining.push(f);
+            }
+        }
+        self.pending = remaining;
+        gop_frames.sort_by(|a, b| a.poc.cmp(&b.poc));
+        for ordered in gop_frames {
+            self.queued.push_back(ordered.frame);
+        }
     }
 
-    fn push_frame(&mut self, f: rust_h265::decoder::Frame, pts: Option<i64>) -> Result<()> {
+    fn drain_all_pending(&mut self) {
+        self.pending.sort_by(|a, b| match a.gop.cmp(&b.gop) {
+            core::cmp::Ordering::Equal => a.poc.cmp(&b.poc),
+            other => other,
+        });
+        for ordered in self.pending.drain(..) {
+            self.queued.push_back(ordered.frame);
+        }
+    }
+
+    fn push_frame(&mut self, f: rust_h265::decoder::Frame, poc: i32, pts: Option<i64>) -> Result<()> {
         let w = f.width as usize;
         let h = f.height as usize;
         let cw = (w + 1) / 2;
@@ -120,10 +150,26 @@ impl RustH265Decoder {
         let frame: VideoFrame = match bd {
             8 => self.make_frame_u8(f, w, h, cw, ch, pts)?,
             10 | 12 => self.make_frame_u16(f, w, h, cw, ch, bd, pts)?,
-            _ => return Ok(()),
+            _ => {
+                return Err(VideosonError::Unsupported(
+                    "H.265: unsupported bit depth",
+                ))
+            }
         };
 
-        self.queued.push_back(frame);
+        let gop = self.gop_count;
+        self.pending.push(OrderedFrame { gop, poc, frame });
+        Ok(())
+    }
+
+    fn check_chroma_420(&self, u_len: usize, v_len: usize, cw: usize, ch: usize) -> Result<()> {
+        if (u_len > 0 && (u_len / cw.max(1)) > ch)
+            || (v_len > 0 && (v_len / cw.max(1)) > ch)
+        {
+            return Err(VideosonError::Unsupported(
+                "H.265: only 4:2:0 chroma is supported",
+            ));
+        }
         Ok(())
     }
 
@@ -136,15 +182,26 @@ impl RustH265Decoder {
         ch: usize,
         pts: Option<i64>,
     ) -> Result<VideoFrame> {
-        let y = f.y.as_u8().unwrap_or(&[]).to_vec();
-        let u = f.u.as_u8().unwrap_or(&[]).to_vec();
-        let v = f.v.as_u8().unwrap_or(&[]).to_vec();
+        let y = f.y.as_u8().ok_or(VideosonError::InvalidData(
+            "H.265: expected U8 pixel data for bit_depth=8",
+        ))?;
+        let u = f.u.as_u8().ok_or(VideosonError::InvalidData(
+            "H.265: expected U8 chroma for bit_depth=8",
+        ))?;
+        let v = f.v.as_u8().ok_or(VideosonError::InvalidData(
+            "H.265: expected U8 chroma for bit_depth=8",
+        ))?;
+        self.check_chroma_420(u.len(), v.len(), cw, ch)?;
 
         if self.wants_nv12() {
             let uv = interleave_uv_nv12(&u, cw, &v, cw, cw, ch)?;
-            Ok(VideoFrame::new_nv12_u8(f.width, f.height, w, cw * 2, y, uv).with_pts(pts))
+            Ok(VideoFrame::new_nv12_u8(f.width, f.height, w, cw * 2, y.to_vec(), uv)
+                .with_pts(pts))
         } else {
-            Ok(VideoFrame::new_yuv420_u8(f.width, f.height, w, cw, cw, y, u, v).with_pts(pts))
+            Ok(VideoFrame::new_yuv420_u8(
+                f.width, f.height, w, cw, cw, y.to_vec(), u.to_vec(), v.to_vec(),
+            )
+            .with_pts(pts))
         }
     }
 
@@ -158,33 +215,49 @@ impl RustH265Decoder {
         bd: u8,
         pts: Option<i64>,
     ) -> Result<VideoFrame> {
-        let y = f.y.as_u16().unwrap_or(&[]).to_vec();
-        let u = f.u.as_u16().unwrap_or(&[]).to_vec();
-        let v = f.v.as_u16().unwrap_or(&[]).to_vec();
+        let y = f.y.as_u16().ok_or(VideosonError::InvalidData(
+            "H.265: expected U16 pixel data for high bit depth",
+        ))?;
+        let u = f.u.as_u16().ok_or(VideosonError::InvalidData(
+            "H.265: expected U16 chroma for high bit depth",
+        ))?;
+        let v = f.v.as_u16().ok_or(VideosonError::InvalidData(
+            "H.265: expected U16 chroma for high bit depth",
+        ))?;
+        self.check_chroma_420(u.len(), v.len(), cw, ch)?;
 
-        if self.wants_p010() && bd == 10 {
-            let uv_stride = cw * 2;
-            let mut uv = Vec::with_capacity(cw * ch * 2);
-            for row in 0..ch {
-                for col in 0..cw {
-                    uv.push(u.get(row * cw + col).copied().unwrap_or(0));
-                    uv.push(v.get(row * cw + col).copied().unwrap_or(0));
-                }
-            }
-            Ok(VideoFrame::new_p010_u16(f.width, f.height, w, uv_stride, y, uv).with_pts(pts))
-        } else {
-            Ok(VideoFrame::new_yuv420_u16(f.width, f.height, w, cw, cw, y, u, v, bd).with_pts(pts))
-        }
+        Ok(VideoFrame::new_yuv420_u16(
+            f.width, f.height, w, cw, cw, y.to_vec(), u.to_vec(), v.to_vec(), bd,
+        )
+        .with_pts(pts))
     }
 
     fn feed_nal(&mut self, nal: &NalUnit<'_>, pts: Option<i64>) -> Result<()> {
+        let is_irap = nal.nal_unit_type.is_irap();
+
         match self.dec.decode_nal(nal) {
             Ok(Some(frame)) => {
-                self.push_frame(frame, pts)?;
+                let poc = frame.pic_order_cnt;
+                self.push_frame(frame, poc, pts)?;
             }
             Ok(None) => {}
             Err(e) => return Err(Self::map_err(e)),
         }
+
+        // GOP boundary detection: IRAP pictures (IDR, BLA, CRA) start a new
+        // GOP.  The in_irap_picture guard prevents double-flushing for
+        // multi-slice IRAP access units where all slices share the same NAL
+        // unit type — only the first slice triggers the flush.
+        if is_irap && !self.in_irap_picture {
+            if self.pending.iter().any(|f| f.gop == self.gop_count) {
+                self.flush_pending_for_gop(self.gop_count);
+            }
+            self.gop_count += 1;
+            self.in_irap_picture = true;
+        } else if nal.nal_unit_type.is_vcl() && !is_irap {
+            self.in_irap_picture = false;
+        }
+
         Ok(())
     }
 
@@ -200,23 +273,26 @@ impl RustH265Decoder {
     }
 
     fn prime_with_hvcc_extradata(&mut self) -> Result<()> {
-        let extradata = &self.params.extradata;
+        let extradata = self.params.extradata.clone();
         if extradata.is_empty() {
             return Ok(());
         }
 
-        let payload: &[u8] = if extradata.len() >= 8 && &extradata[4..8] == b"hvcC" {
-            &extradata[8..]
+        let payload: Vec<u8> = if extradata.len() >= 8 && &extradata[4..8] == b"hvcC" {
+            extradata[8..].to_vec()
         } else {
-            extradata.as_slice()
+            extradata
         };
 
-        let cfg = parse_hvcc_extradata(payload)
+        let cfg = parse_hvcc_extradata(&payload)
             .map_err(|e| VideosonError::Message(alloc::format!("hvcC: {e:?}").into()))?;
         self.hvcc_length_size = Some(cfg.nal_len_size);
 
-        let nal_list: Vec<Vec<u8>> = videoson_common::hvcc_nal_bytes(payload)
-            .filter_map(|r| r.ok().map(|b| b.to_vec()))
+        let nal_list: Vec<Vec<u8>> = videoson_common::hvcc_nal_bytes(&payload)
+            .collect::<core::result::Result<Vec<_>, _>>()
+            .map_err(|e| VideosonError::Message(alloc::format!("hvcC NAL parse: {e:?}").into()))?
+            .iter()
+            .map(|b| b.to_vec())
             .collect();
 
         for nal_bytes in &nal_list {
@@ -232,6 +308,12 @@ impl VideoDecoder for RustH265Decoder {
     fn try_new(params: &VideoCodecParams, opts: &VideoDecoderOptions) -> Result<Self> {
         if params.codec != CodecType::H265 {
             return Err(VideosonError::InvalidData("params.codec is not H265"));
+        }
+
+        if matches!(opts.output_format, VideoOutputFormat::P010) {
+            return Err(VideosonError::Unsupported(
+                "P010 output is not supported for H.265 (use Native/Yuv420/Nv12)",
+            ));
         }
 
         let nal_format = params.nal_format.unwrap_or(NalFormat::AnnexB);
@@ -288,7 +370,8 @@ impl VideoDecoder for RustH265Decoder {
 
     fn output_format(&self) -> VideoOutputFormat {
         match self.opts.output_format {
-            VideoOutputFormat::P010 => VideoOutputFormat::P010,
+            // P010 rejected at construction; returns Yuv420 (U16 for 10+ bit)
+            VideoOutputFormat::P010 => VideoOutputFormat::Yuv420,
             VideoOutputFormat::Nv12 => VideoOutputFormat::Nv12,
             VideoOutputFormat::Native | VideoOutputFormat::Yuv420 => VideoOutputFormat::Yuv420,
         }

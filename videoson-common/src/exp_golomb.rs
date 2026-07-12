@@ -19,7 +19,12 @@ pub fn read_ue(br: &mut BitReader<'_>) -> BitstreamResult<u32> {
 }
 
 pub fn read_se(br: &mut BitReader<'_>) -> BitstreamResult<i32> {
-    let code_num = read_ue(br)? as i32;
-    let m = (code_num + 1) >> 1;
-    if (code_num & 1) == 0 { Ok(-m) } else { Ok(m) }
+    let code_num = i64::from(read_ue(br)?);
+    let value = if code_num & 1 == 0 {
+        -(code_num / 2)
+    } else {
+        (code_num + 1) / 2
+    };
+    i32::try_from(value)
+        .map_err(|_| BitstreamError::Invalid("se(v): value out of i32 range"))
 }

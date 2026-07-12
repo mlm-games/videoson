@@ -235,14 +235,40 @@ pub fn interleave_uv_nv12(
 }
 
 /// Copy `height` rows of `width` bytes from a strided source into a
-/// tightly-packed `Vec`. When `stride == width`, this is a single clone.
-pub fn tight_pack_plane(src: &[u8], stride: usize, width: usize, height: usize) -> Vec<u8> {
+/// tightly-packed `Vec`. Returns `InvalidData` if the source is too short.
+pub fn tight_pack_plane(
+    src: &[u8],
+    stride: usize,
+    width: usize,
+    height: usize,
+) -> Result<Vec<u8>> {
+    let total = width.checked_mul(height).ok_or(VideosonError::InvalidData(
+        "tight_pack_plane: dimensions overflow",
+    ))?;
     if stride == width {
-        return src[..width * height].to_vec();
+        if src.len() < total {
+            return Err(VideosonError::InvalidData(
+                "tight_pack_plane: source buffer too short (tight path)",
+            ));
+        }
+        return Ok(src[..total].to_vec());
     }
-    let mut out = Vec::with_capacity(width * height);
+    // Check the last byte we would read
+    let last_start = (height.saturating_sub(1)).checked_mul(stride).ok_or(
+        VideosonError::InvalidData("tight_pack_plane: stride overflow"),
+    )?;
+    let last_end = last_start.checked_add(width).ok_or(VideosonError::InvalidData(
+        "tight_pack_plane: width overflow",
+    ))?;
+    if last_end > src.len() {
+        return Err(VideosonError::InvalidData(
+            "tight_pack_plane: source buffer too short",
+        ));
+    }
+    let mut out = Vec::with_capacity(total);
     for row in 0..height {
-        out.extend_from_slice(&src[row * stride..row * stride + width]);
+        let start = row * stride;
+        out.extend_from_slice(&src[start..start + width]);
     }
-    out
+    Ok(out)
 }

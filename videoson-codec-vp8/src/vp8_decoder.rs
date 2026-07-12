@@ -1,7 +1,6 @@
 extern crate alloc;
 
 use alloc::collections::VecDeque;
-use alloc::vec::Vec;
 
 use oxideav_vp8::state::Vp8DecoderState;
 
@@ -22,17 +21,23 @@ impl Vp8Decoder {
         matches!(self.opts.output_format, VideoOutputFormat::Nv12)
     }
 
-    fn push_frame(&mut self, f: oxideav_vp8::decoder::Vp8DecodedFrame, pts: Option<i64>) {
+    fn push_frame(&mut self, f: oxideav_vp8::decoder::Vp8DecodedFrame, pts: Option<i64>) -> Result<()> {
         let w = f.width as usize;
         let h = f.height as usize;
         let cw = (w + 1) / 2;
         let ch = (h + 1) / 2;
 
+        // Reject non-4:2:0 chroma
+        if (!f.u.is_empty() && (f.u.len() / cw.max(1)) > ch)
+            || (!f.v.is_empty() && (f.v.len() / cw.max(1)) > ch)
+        {
+            return Err(VideosonError::Unsupported(
+                "VP8: only 4:2:0 chroma is supported",
+            ));
+        }
+
         if self.wants_nv12() {
-            let uv = match interleave_uv_nv12(&f.u, cw, &f.v, cw, cw, ch) {
-                Ok(uv) => uv,
-                Err(_) => Vec::new(),
-            };
+            let uv = interleave_uv_nv12(&f.u, cw, &f.v, cw, cw, ch)?;
             self.queued.push_back(
                 VideoFrame::new_nv12_u8(f.width, f.height, w, cw * 2, f.y, uv).with_pts(pts),
             );
@@ -42,6 +47,7 @@ impl Vp8Decoder {
                     .with_pts(pts),
             );
         }
+        Ok(())
     }
 }
 
@@ -80,8 +86,7 @@ impl VideoDecoder for Vp8Decoder {
             return Ok(());
         }
 
-        self.push_frame(frame, packet.pts);
-        Ok(())
+        self.push_frame(frame, packet.pts)
     }
 
     fn receive_frame(&mut self) -> Result<Option<VideoFrame>> {

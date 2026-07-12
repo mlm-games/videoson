@@ -30,7 +30,7 @@ impl<'a> BitReader<'a> {
 
     #[inline]
     fn peek_bit_at(&self, bit_pos: usize) -> BitstreamResult<bool> {
-        if bit_pos >= self.buf.len() * 8 {
+        if bit_pos >> 3 >= self.buf.len() {
             return Err(BitstreamError::Eof);
         }
         let byte = self.buf[bit_pos >> 3];
@@ -62,10 +62,11 @@ impl<'a> BitReader<'a> {
 
     #[inline]
     pub fn read_bit(&mut self) -> BitstreamResult<bool> {
-        if self.bit_pos >= self.buf.len() * 8 {
+        let byte_idx = self.bit_pos >> 3;
+        if byte_idx >= self.buf.len() {
             return Err(BitstreamError::Eof);
         }
-        let byte = self.buf[self.bit_pos >> 3];
+        let byte = self.buf[byte_idx];
         let shift = 7 - (self.bit_pos & 7);
         self.bit_pos += 1;
         Ok(((byte >> shift) & 1) != 0)
@@ -124,12 +125,12 @@ impl<'a> BitReader<'a> {
             return Err(BitstreamError::Invalid("read_bytes: not byte-aligned"));
         }
         let pos = self.byte_pos();
-        let end = pos + out.len();
+        let end = pos.checked_add(out.len()).ok_or(BitstreamError::Eof)?;
         if end > self.buf.len() {
             return Err(BitstreamError::Eof);
         }
         out.copy_from_slice(&self.buf[pos..end]);
-        self.bit_pos += out.len() * 8;
+        self.bit_pos = self.bit_pos.checked_add(out.len() * 8).ok_or(BitstreamError::Eof)?;
         Ok(())
     }
 
@@ -139,7 +140,8 @@ impl<'a> BitReader<'a> {
     }
 
     pub fn set_bit_pos(&mut self, bit_pos: usize) -> BitstreamResult<()> {
-        if bit_pos > self.buf.len() * 8 {
+        let max_bits = self.buf.len().checked_mul(8).ok_or(BitstreamError::Eof)?;
+        if bit_pos > max_bits {
             return Err(BitstreamError::Eof);
         }
         self.bit_pos = bit_pos;

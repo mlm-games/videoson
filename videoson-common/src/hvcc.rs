@@ -60,12 +60,13 @@ impl<'a> Iterator for HvccNalIter<'a> {
                     Some(l) => l as usize,
                     None => return Some(Err(BitstreamError::Eof)),
                 };
-                self.pos += 2;
-                if self.pos + len > self.data.len() {
+                self.pos = self.pos.checked_add(2)?;
+                let nal_end = self.pos.checked_add(len)?;
+                if nal_end > self.data.len() {
                     return Some(Err(BitstreamError::Eof));
                 }
-                let nal_bytes = &self.data[self.pos..self.pos + len];
-                self.pos += len;
+                let nal_bytes = &self.data[self.pos..nal_end];
+                self.pos = nal_end;
                 return Some(Ok(nal_bytes));
             }
 

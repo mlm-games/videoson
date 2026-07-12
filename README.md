@@ -10,7 +10,7 @@ A Rust video decode wrapper, with its workspace design being inspired by Symphon
 | `videoson-common` | Bitstream utilities: Annex B, avcC, RBSP, Exp-Golomb, BitReader |
 | `videoson-format-ivf` | IVF demuxer/header parser |
 | `videoson-codec-*` | decoder crates (wraps crates mentioned below, Apache/MIT) |
-| `videoson-codec-rav1d` | AV1 decoder (wraps `rav1d-safe`, GPLv3) |
+| `videoson-codec-rav1d` | AV1 decoder (wraps `rav1d-safe`, **AGPL-3.0-only**) |
 | `videoson` | Facade crate with pre-populated registry |
 
 ## Status
@@ -47,5 +47,5 @@ let mut decoder = registry
 | `h265` | H.265/HEVC decoder (via `rust_h265`) | no |
 | `vp8` | VP8 decoder (via `oxideav-vp8`) | no |
 | `vp9` | VP9 decoder (via `oxideav-vp9`) | no |
-| `rav1d` | AV1 decoder (via `rav1d-safe`, **GPLv3**) | no |
+| `rav1d` | AV1 decoder (via `rav1d-safe`, **AGPL-3.0-only**) — changes distribution obligations | no |
 | `ivf` | IVF demuxer | yes |

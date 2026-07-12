@@ -43,22 +43,24 @@ impl<'a> Iterator for AvccIter<'a> {
         }
 
         let n = self.nal_len_size as usize;
-        if self.i + n > self.data.len() {
+        let end = self.i.checked_add(n)?;
+        if end > self.data.len() {
             return Some(Err(BitstreamError::Eof));
         }
 
         let mut len: usize = 0;
-        for b in &self.data[self.i..self.i + n] {
+        for b in &self.data[self.i..end] {
             len = (len << 8) | (*b as usize);
         }
-        self.i += n;
+        self.i = end;
 
-        if self.i + len > self.data.len() {
+        let nal_end = self.i.checked_add(len)?;
+        if nal_end > self.data.len() {
             return Some(Err(BitstreamError::Eof));
         }
 
-        let nal = &self.data[self.i..self.i + len];
-        self.i += len;
+        let nal = &self.data[self.i..nal_end];
+        self.i = nal_end;
 
         if nal.is_empty() {
             return Some(Err(BitstreamError::Invalid("empty NAL")));

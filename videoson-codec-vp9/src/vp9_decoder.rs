@@ -44,6 +44,15 @@ fn convert_frame(
     let cw = (w + 1) / 2;
     let ch = (h + 1) / 2;
 
+    // Reject non-4:2:0 chroma (u16 sample count / cw = chroma height)
+    if (!f.u.is_empty() && (f.u.len() / cw.max(1)) > ch)
+        || (!f.v.is_empty() && (f.v.len() / cw.max(1)) > ch)
+    {
+        return Err(VideosonError::Unsupported(
+            "VP9: only 4:2:0 chroma is supported",
+        ));
+    }
+
     if f.bit_depth == 8 {
         let y = pack_u16_to_u8(&f.y);
         let u_data = pack_u16_to_u8(&f.u);
@@ -165,6 +174,7 @@ impl VideoDecoder for Vp9Decoder {
         match self.opts.output_format {
             VideoOutputFormat::Nv12 => VideoOutputFormat::Nv12,
             VideoOutputFormat::Native | VideoOutputFormat::Yuv420 => VideoOutputFormat::Yuv420,
+            // P010 not supported for VP9; returns Yuv420 or Yuv420-U16 for high-bitdepth
             VideoOutputFormat::P010 => VideoOutputFormat::Yuv420,
         }
     }

@@ -1,4 +1,23 @@
-use std::collections::VecDeque;
+//! AV1 decoder wrapping `rav1d-safe`.
+//!
+//! # PTS caveat
+//! `rav1d-safe`'s `decode()` may buffer frames internally and return them
+//! out of order or not at all for a given packet. Flushed frames lose their
+//! PTS association. This wrapper attaches the submitting packet's PTS to
+//! the returned frame, which can attach the wrong timestamp for delayed or
+//! reordered output.
+//!
+//! # License
+//! This crate links `rav1d-safe` which is AGPL-3.0-or-commercial. The
+//! workspace's default LGPL-2.1 does **not** apply to this crate.
+
+#![cfg_attr(not(feature = "std"), no_std)]
+
+extern crate alloc;
+
+use alloc::boxed::Box;
+use alloc::collections::VecDeque;
+use alloc::format;
 
 use rav1d_safe::{Decoder, Frame, Planes};
 use videoson_core::{
@@ -86,6 +105,7 @@ impl VideoDecoder for Rav1dSafeDecoder {
         match self.opts.output_format {
             VideoOutputFormat::Nv12 => VideoOutputFormat::Nv12,
             VideoOutputFormat::Native | VideoOutputFormat::Yuv420 => VideoOutputFormat::Yuv420,
+            // AV1 only supports 8-bit YUV420; reject P010 at construction
             VideoOutputFormat::P010 => VideoOutputFormat::Yuv420,
         }
     }
@@ -95,8 +115,8 @@ impl RegisterableVideoDecoder for Rav1dSafeDecoder {
     fn try_registry_new(
         params: &VideoCodecParams,
         opts: &VideoDecoderOptions,
-    ) -> Result<std::boxed::Box<dyn VideoDecoder>> {
-        Ok(std::boxed::Box::new(Self::try_new(params, opts)?))
+    ) -> Result<Box<dyn VideoDecoder>> {
+        Ok(Box::new(Self::try_new(params, opts)?))
     }
 
     fn supported_codecs() -> &'static [SupportedVideoCodec] {

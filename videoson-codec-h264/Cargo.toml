@@ -7,10 +7,9 @@ rust-version.workspace = true
 
 [features]
 default = ["std"]
-std = ["videoson-core/std", "videoson-common/std"]
+std = ["videoson-core/std"]
 
 [dependencies]
 videoson-core = { path = "../videoson-core", default-features = false }
-videoson-common = { path = "../videoson-common", default-features = false }
 
 rust_h264.workspace = true

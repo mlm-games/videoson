@@ -13,4 +13,4 @@ std = ["videoson-core/std", "videoson-common/std"]
 videoson-core = { path = "../videoson-core", default-features = false }
 videoson-common = { path = "../videoson-common", default-features = false }
 
-rust_h265 = "=0.1.0"
+rust_h265.workspace = true

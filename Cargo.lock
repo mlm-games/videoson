@@ -256,7 +256,7 @@ checksum = "043a9d81b6c0cb1d7abb3653c53a8463063637836ed469f260bb4cc60f7ab917"
 [[package]]
 name = "oxideav-vp9"
 version = "0.0.12"
-source = "git+https://github.com/OxideAV/oxideav-vp9#50360260bc9aded0d6b47144de580f1e28a32220"
+source = "git+https://github.com/OxideAV/oxideav-vp9?rev=50360260bc9aded0d6b47144de580f1e28a32220#50360260bc9aded0d6b47144de580f1e28a32220"
 dependencies = [
  "oxideav-core",
 ]
@@ -382,8 +382,6 @@ checksum = "fbedf5e104105e8783a77926f1e212ea37e78fd3b38b2c928938a283d083d6f1"
 [[package]]
 name = "rust_h265"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dde60f5842f27ed06f1d84844cacd93d1a159f606365b30a5594c771e6b4eb17"
 
 [[package]]
 name = "safe_unaligned_simd"
@@ -560,7 +558,6 @@ name = "videoson-codec-h264"
 version = "0.2.0"
 dependencies = [
  "rust_h264",
- "videoson-common",
  "videoson-core",
 ]
 
@@ -586,7 +583,6 @@ name = "videoson-codec-vp8"
 version = "0.2.0"
 dependencies = [
  "oxideav-vp8",
- "videoson-common",
  "videoson-core",
 ]
 
@@ -595,7 +591,6 @@ name = "videoson-codec-vp9"
 version = "0.2.0"
 dependencies = [
  "oxideav-vp9",
- "videoson-common",
  "videoson-core",
 ]
 
