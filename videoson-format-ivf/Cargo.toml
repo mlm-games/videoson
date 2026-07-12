@@ -10,5 +10,6 @@ default = ["std"]
 std = ["videoson-core/std", "videoson-common/std"]
 
 [dependencies]
-videoson-core = { path = "../videoson-core", default-features = false }
-videoson-common = { path = "../videoson-common", default-features = false }
+videoson-core.workspace = true
+videoson-common.workspace = true
+oxideav-bitstream.workspace = true

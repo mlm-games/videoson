@@ -130,7 +130,10 @@ impl<'a> BitReader<'a> {
             return Err(BitstreamError::Eof);
         }
         out.copy_from_slice(&self.buf[pos..end]);
-        self.bit_pos = self.bit_pos.checked_add(out.len() * 8).ok_or(BitstreamError::Eof)?;
+        self.bit_pos = self
+            .bit_pos
+            .checked_add(out.len().checked_mul(8).ok_or(BitstreamError::Eof)?)
+            .ok_or(BitstreamError::Eof)?;
         Ok(())
     }
 

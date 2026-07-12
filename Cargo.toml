@@ -26,3 +26,11 @@ rust_h264 = { version = "0.4.0" }
 rust_h265 = { path = "../rust_h265" }
 # rust_h265 = { version = "=0.1.0" }
 oxideav-vp9 = { git = "https://github.com/OxideAV/oxideav-vp9", rev = "50360260bc9aded0d6b47144de580f1e28a32220", default-features = false }
+oxideav-bitstream = { git = "https://github.com/OxideAV/oxideav-bitstream", default-features = false }
+
+videoson-codec-h264 = { path = "videoson-codec-h264", version = "=0.2.0", default-features = false }
+videoson-codec-h265 = { path = "videoson-codec-h265", version = "=0.2.0", default-features = false }
+videoson-codec-vp8 = { path = "videoson-codec-vp8", version = "=0.2.0", default-features = false }
+videoson-codec-vp9 = { path = "videoson-codec-vp9", version = "=0.2.0", default-features = false }
+videoson-codec-rav1d = { path = "videoson-codec-rav1d", version = "=0.2.0" }
+videoson-format-ivf = { path = "videoson-format-ivf", version = "=0.2.0", default-features = false }

@@ -10,7 +10,7 @@ use videoson_common::parse_hvcc_extradata;
 
 use videoson_core::{
     CodecType, NalFormat, Packet, Result, VideoCodecParams, VideoDecoder, VideoDecoderOptions,
-    VideoFrame, VideoOutputFormat, VideosonError, interleave_uv_nv12,
+    VideoFrame, VideoOutputFormat, VideosonError, interleave_uv_nv12, require_plane_len,
 };
 
 struct OrderedFrame {
@@ -130,6 +130,27 @@ impl RustH265Decoder {
         }
     }
 
+    fn flush_ready_frames(&mut self) {
+        if self.pending.len() <= 1 {
+            return;
+        }
+        self.pending.sort_by(|a, b| a.poc.cmp(&b.poc));
+        let max_poc = self.pending.last().unwrap().poc;
+        let mut ready = Vec::new();
+        let mut remaining = Vec::new();
+        for f in self.pending.drain(..) {
+            if f.poc < max_poc {
+                ready.push(f);
+            } else {
+                remaining.push(f);
+            }
+        }
+        self.pending = remaining;
+        for ordered in ready {
+            self.queued.push_back(ordered.frame);
+        }
+    }
+
     fn drain_all_pending(&mut self) {
         self.pending.sort_by(|a, b| match a.gop.cmp(&b.gop) {
             core::cmp::Ordering::Equal => a.poc.cmp(&b.poc),
@@ -191,6 +212,9 @@ impl RustH265Decoder {
         let v = f.v.as_u8().ok_or(VideosonError::InvalidData(
             "H.265: expected U8 chroma for bit_depth=8",
         ))?;
+        require_plane_len(y.len(), w, w, f.height as usize, "H.265: Y plane too short")?;
+        require_plane_len(u.len(), cw, cw, ch, "H.265: U plane too short")?;
+        require_plane_len(v.len(), cw, cw, ch, "H.265: V plane too short")?;
         self.check_chroma_420(u.len(), v.len(), cw, ch)?;
 
         if self.wants_nv12() {
@@ -224,6 +248,9 @@ impl RustH265Decoder {
         let v = f.v.as_u16().ok_or(VideosonError::InvalidData(
             "H.265: expected U16 chroma for high bit depth",
         ))?;
+        require_plane_len(y.len(), w, w, f.height as usize, "H.265: Y plane too short")?;
+        require_plane_len(u.len(), cw, cw, ch, "H.265: U plane too short")?;
+        require_plane_len(v.len(), cw, cw, ch, "H.265: V plane too short")?;
         self.check_chroma_420(u.len(), v.len(), cw, ch)?;
 
         Ok(VideoFrame::new_yuv420_u16(
@@ -243,6 +270,12 @@ impl RustH265Decoder {
             Ok(None) => {}
             Err(e) => return Err(Self::map_err(e)),
         }
+
+        // Continuous flush: emit all pending frames except the one with the
+        // highest POC.  This ensures frames flow with minimal latency while
+        // maintaining correct POC order — the max-POC frame is held back as
+        // a potential reference until the next decode produces a higher POC.
+        self.flush_ready_frames();
 
         // GOP boundary detection: IRAP pictures (IDR, BLA, CRA) start a new
         // GOP.  The in_irap_picture guard prevents double-flushing for
@@ -324,6 +357,9 @@ impl VideoDecoder for RustH265Decoder {
             nal_format,
             dec: Decoder::new(),
             queued: VecDeque::new(),
+            pending: Vec::new(),
+            gop_count: 0,
+            in_irap_picture: false,
             hvcc_length_size: None,
         };
 
@@ -353,22 +389,28 @@ impl VideoDecoder for RustH265Decoder {
 
     fn send_eos(&mut self) -> Result<()> {
         if let Some(frame) = self.dec.flush() {
-            self.push_frame(frame, None)?;
+            let poc = frame.pic_order_cnt;
+            self.push_frame(frame, poc, None)?;
+        }
+        self.drain_all_pending();
+        Ok(())
+    }
+
+    fn reset(&mut self) -> Result<()> {
+        self.dec = Decoder::new();
+        self.queued.clear();
+        self.pending.clear();
+        self.gop_count = 0;
+        self.in_irap_picture = false;
+        self.hvcc_length_size = None;
+
+        if matches!(self.nal_format, NalFormat::Hvcc { .. }) {
+            self.prime_with_hvcc_extradata()?;
         }
         Ok(())
     }
 
-    fn reset(&mut self) {
-        self.dec = Decoder::new();
-        self.queued.clear();
-        self.hvcc_length_size = None;
-
-        if matches!(self.nal_format, NalFormat::Hvcc { .. }) {
-            let _ = self.prime_with_hvcc_extradata();
-        }
-    }
-
-    fn output_format(&self) -> VideoOutputFormat {
+    fn requested_output_format(&self) -> VideoOutputFormat {
         match self.opts.output_format {
             // P010 rejected at construction; returns Yuv420 (U16 for 10+ bit)
             VideoOutputFormat::P010 => VideoOutputFormat::Yuv420,

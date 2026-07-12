@@ -15,7 +15,7 @@ use oxideav_vp9::{Vp9DecodedFrame, decode_vp9_sequence, split_superframe};
 use videoson_core::{
     CodecType, ColorInfo, Packet, PixelFormat, PlaneData, Result, VideoCodecParams, VideoDecoder,
     VideoDecoderOptions, VideoFrame, VideoFramePlanes, VideoOutputFormat, VideoPlane,
-    VideosonError, interleave_uv_nv12,
+    VideosonError, interleave_uv_nv12, require_plane_len,
 };
 
 struct BufferedPacket {
@@ -51,6 +51,14 @@ fn convert_frame(
         return Err(VideosonError::Unsupported(
             "VP9: only 4:2:0 chroma is supported",
         ));
+    }
+
+    require_plane_len(f.y.len(), w, w, h, "VP9: Y plane too short")?;
+    if !f.u.is_empty() {
+        require_plane_len(f.u.len(), cw, cw, ch, "VP9: U plane too short")?;
+    }
+    if !f.v.is_empty() {
+        require_plane_len(f.v.len(), cw, cw, ch, "VP9: V plane too short")?;
     }
 
     if f.bit_depth == 8 {
@@ -115,9 +123,11 @@ impl Vp9Decoder {
         let frames = decode_vp9_sequence(&refs)
             .map_err(|e| VideosonError::Message(alloc::format!("VP9: {e}").into()))?;
 
-        for (i, frame) in frames.into_iter().enumerate() {
-            let pts = all_pts.get(i).copied().flatten();
-            let vf = convert_frame(frame, pts, &self.opts)?;
+        for (_i, frame) in frames.into_iter().enumerate() {
+            // PTS-per-frame is not reliable here because decode_vp9_sequence
+            // may reorder, drop, or insert frames (hidden/alt-ref).
+            // Until proper packet-to-frame mapping is implemented, drop PTS.
+            let vf = convert_frame(frame, None, &self.opts)?;
             self.queued.push_back(vf);
         }
 
@@ -165,12 +175,13 @@ impl VideoDecoder for Vp9Decoder {
         self.drain_packets()
     }
 
-    fn reset(&mut self) {
+    fn reset(&mut self) -> Result<()> {
         self.packets.clear();
         self.queued.clear();
+        Ok(())
     }
 
-    fn output_format(&self) -> VideoOutputFormat {
+    fn requested_output_format(&self) -> VideoOutputFormat {
         match self.opts.output_format {
             VideoOutputFormat::Nv12 => VideoOutputFormat::Nv12,
             VideoOutputFormat::Native | VideoOutputFormat::Yuv420 => VideoOutputFormat::Yuv420,

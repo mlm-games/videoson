@@ -5,6 +5,30 @@ use alloc::vec::Vec;
 
 use crate::{PixelFormat, Result, VideoFramePlanes, VideosonError};
 
+/// Verify that `actual` bytes are enough to cover a (width × height) plane
+/// read row-by-row with the given `stride` (last row only needs `width` bytes).
+pub fn require_plane_len(
+    actual: usize,
+    stride: usize,
+    width: usize,
+    height: usize,
+    name: &'static str,
+) -> Result<()> {
+    if height == 0 {
+        return Ok(());
+    }
+    let last_row = height - 1;
+    let required = last_row
+        .checked_mul(stride)
+        .and_then(|x| x.checked_add(width))
+        .ok_or(VideosonError::InvalidData("plane size overflow"))?;
+    if actual < required {
+        Err(VideosonError::InvalidData(name))
+    } else {
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct ColorInfo {
     pub primaries: u8,

@@ -10,6 +10,6 @@ default = ["std"]
 std = ["videoson-core/std"]
 
 [dependencies]
-videoson-core = { path = "../videoson-core", default-features = false }
+videoson-core.workspace = true
 
 oxideav-vp8 = { version = "0.2.6", default-features = false }

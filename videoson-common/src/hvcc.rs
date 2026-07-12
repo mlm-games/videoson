@@ -60,8 +60,14 @@ impl<'a> Iterator for HvccNalIter<'a> {
                     Some(l) => l as usize,
                     None => return Some(Err(BitstreamError::Eof)),
                 };
-                self.pos = self.pos.checked_add(2)?;
-                let nal_end = self.pos.checked_add(len)?;
+                self.pos = match self.pos.checked_add(2) {
+                    Some(v) => v,
+                    None => return Some(Err(BitstreamError::Invalid("hvcC offset overflow"))),
+                };
+                let nal_end = match self.pos.checked_add(len) {
+                    Some(v) => v,
+                    None => return Some(Err(BitstreamError::Invalid("hvcC NAL length overflow"))),
+                };
                 if nal_end > self.data.len() {
                     return Some(Err(BitstreamError::Eof));
                 }

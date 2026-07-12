@@ -13,6 +13,9 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
+#[cfg(not(feature = "std"))]
+compile_error!("videoson-codec-rav1d requires the `std` feature; `rav1d-safe` is not no_std compatible");
+
 extern crate alloc;
 
 use alloc::boxed::Box;
@@ -93,15 +96,15 @@ impl VideoDecoder for Rav1dSafeDecoder {
         Ok(())
     }
 
-    fn reset(&mut self) {
-        if let Ok(decoder) = Decoder::new() {
-            self.decoder = decoder;
-        }
+    fn reset(&mut self) -> Result<()> {
+        self.decoder = Decoder::new()
+            .map_err(|e| VideosonError::Message(alloc::format!("rav1d reset: {e}").into()))?;
         self.queued.clear();
         self.eos_sent = false;
+        Ok(())
     }
 
-    fn output_format(&self) -> VideoOutputFormat {
+    fn requested_output_format(&self) -> VideoOutputFormat {
         match self.opts.output_format {
             VideoOutputFormat::Nv12 => VideoOutputFormat::Nv12,
             VideoOutputFormat::Native | VideoOutputFormat::Yuv420 => VideoOutputFormat::Yuv420,

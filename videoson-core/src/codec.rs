@@ -75,6 +75,11 @@ impl VideoCodecParams {
 pub struct VideoDecoderOptions {
     pub verify: bool,
     pub output_format: VideoOutputFormat,
+    /// When set, truncated chroma planes are zero-padded to the expected size
+    /// instead of raising `InvalidData`.  This is a compatibility escape hatch
+    /// for streams that don't properly signal monochrome (e.g. lessAVC).
+    /// Default: `false` (strict validation).
+    pub tolerate_truncated_chroma: bool,
 }
 
 impl Default for VideoDecoderOptions {
@@ -82,6 +87,7 @@ impl Default for VideoDecoderOptions {
         Self {
             verify: false,
             output_format: VideoOutputFormat::Native,
+            tolerate_truncated_chroma: false,
         }
     }
 }
@@ -102,9 +108,27 @@ pub trait VideoDecoder {
         Ok(())
     }
 
-    fn reset(&mut self);
+    /// Reset decoder state as if newly constructed.
+    ///
+    /// May fail if re-priming codec extradata fails (e.g. corrupted avcC/hvcC).
+    fn reset(&mut self) -> Result<()> {
+        Ok(())
+    }
 
-    fn output_format(&self) -> VideoOutputFormat {
+    /// Returns the output format the caller requested via `VideoDecoderOptions`.
+    ///
+    /// This reflects the *requested* format, which the decoder will honour
+    /// when possible.  The actual per-frame format may differ:
+    ///
+    /// | Stream property       | Actual format                |
+    /// |-----------------------|------------------------------|
+    /// | 8-bit colour          | matches request              |
+    /// | 10/12-bit colour      | `Yuv420` (U16 planes)        |
+    /// | Monochrome            | `Gray` (single Y plane)      |
+    ///
+    /// Always inspect the `VideoFrame` fields (`pixfmt`, `bit_depth`,
+    /// `plane_data`) to determine the per-frame pixel format.
+    fn requested_output_format(&self) -> VideoOutputFormat {
         VideoOutputFormat::Native
     }
 }

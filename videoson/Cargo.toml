@@ -24,11 +24,11 @@ rav1d = ["dep:videoson-codec-rav1d", "std"]
 ivf = ["dep:videoson-format-ivf"]
 
 [dependencies]
-videoson-core = { path = "../videoson-core", default-features = false }
-videoson-common = { path = "../videoson-common", default-features = false }
-videoson-format-ivf = { path = "../videoson-format-ivf", optional = true, default-features = false }
-videoson-codec-h264 = { path = "../videoson-codec-h264", optional = true, default-features = false }
-videoson-codec-h265 = { path = "../videoson-codec-h265", optional = true, default-features = false }
-videoson-codec-vp8 = { path = "../videoson-codec-vp8", optional = true, default-features = false }
-videoson-codec-vp9 = { path = "../videoson-codec-vp9", optional = true, default-features = false }
-videoson-codec-rav1d = { path = "../videoson-codec-rav1d", optional = true }
+videoson-core.workspace = true
+videoson-common.workspace = true
+videoson-format-ivf = { workspace = true, optional = true }
+videoson-codec-h264 = { workspace = true, optional = true }
+videoson-codec-h265 = { workspace = true, optional = true }
+videoson-codec-vp8 = { workspace = true, optional = true }
+videoson-codec-vp9 = { workspace = true, optional = true }
+videoson-codec-rav1d = { workspace = true, optional = true }

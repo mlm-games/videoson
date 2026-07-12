@@ -97,12 +97,13 @@ impl VideoDecoder for Vp8Decoder {
         Ok(())
     }
 
-    fn reset(&mut self) {
+    fn reset(&mut self) -> Result<()> {
         self.dec = Vp8DecoderState::new();
         self.queued.clear();
+        Ok(())
     }
 
-    fn output_format(&self) -> VideoOutputFormat {
+    fn requested_output_format(&self) -> VideoOutputFormat {
         match self.opts.output_format {
             VideoOutputFormat::Nv12 => VideoOutputFormat::Nv12,
             VideoOutputFormat::Native | VideoOutputFormat::Yuv420 => VideoOutputFormat::Yuv420,

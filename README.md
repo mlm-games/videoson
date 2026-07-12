@@ -17,7 +17,7 @@ A Rust video decode wrapper, with its workspace design being inspired by Symphon
 
 **Decoding:**
 - H.264 (via `rust_h264`, all platforms)
-- AV1 (via `rav1d-safe`, GPLv3, std-only, 8-bit YUV420)
+- AV1 (via `rav1d-safe`, AGPL-3.0-or-commercial, std-only, 8-bit YUV420)
 - H.265 (via `rust_h265`, all platforms)
 - VP8 & VP9 (via `oxideav`, experimental, basic)
 
@@ -47,5 +47,5 @@ let mut decoder = registry
 | `h265` | H.265/HEVC decoder (via `rust_h265`) | no |
 | `vp8` | VP8 decoder (via `oxideav-vp8`) | no |
 | `vp9` | VP9 decoder (via `oxideav-vp9`) | no |
-| `rav1d` | AV1 decoder (via `rav1d-safe`, **AGPL-3.0-only**) — changes distribution obligations | no |
+| `rav1d` | AV1 decoder (via `rav1d-safe`, **AGPL-3.0-only**) | no |
 | `ivf` | IVF demuxer | yes |

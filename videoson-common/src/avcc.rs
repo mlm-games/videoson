@@ -43,7 +43,10 @@ impl<'a> Iterator for AvccIter<'a> {
         }
 
         let n = self.nal_len_size as usize;
-        let end = self.i.checked_add(n)?;
+        let end = match self.i.checked_add(n) {
+            Some(v) => v,
+            None => return Some(Err(BitstreamError::Invalid("avcC offset overflow"))),
+        };
         if end > self.data.len() {
             return Some(Err(BitstreamError::Eof));
         }
@@ -54,7 +57,10 @@ impl<'a> Iterator for AvccIter<'a> {
         }
         self.i = end;
 
-        let nal_end = self.i.checked_add(len)?;
+        let nal_end = match self.i.checked_add(len) {
+            Some(v) => v,
+            None => return Some(Err(BitstreamError::Invalid("avcC NAL length overflow"))),
+        };
         if nal_end > self.data.len() {
             return Some(Err(BitstreamError::Eof));
         }

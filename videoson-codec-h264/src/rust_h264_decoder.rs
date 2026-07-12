@@ -9,7 +9,7 @@ use rust_h264::nal::{NalUnit, NalUnitType, parse_annex_b, parse_avcc, parse_avcc
 
 use videoson_core::{
     CodecType, NalFormat, Packet, Result, VideoCodecParams, VideoDecoder, VideoDecoderOptions,
-    VideoFrame, VideoOutputFormat, VideosonError, interleave_uv_nv12,
+    VideoFrame, VideoOutputFormat, VideosonError, interleave_uv_nv12, require_plane_len,
 };
 
 struct OrderedFrame {
@@ -77,34 +77,72 @@ impl RustH264Decoder {
                 ));
             }
 
-            // If chroma is truncated, zero-pad to expected size rather than
-            // rejecting the frame. Some encoders (e.g. less_avc with odd
-            // dimensions) don't properly signal monochrome, causing the
-            // decoder to return incomplete chroma planes.
-            let mut u_buf = alloc::vec![0u8; chroma_samples];
-            let u_copy = core::cmp::min(f.u.len(), chroma_samples);
-            u_buf[..u_copy].copy_from_slice(&f.u[..u_copy]);
+            // Chroma plane validation (strict by default).
+            // When tolerate_truncated_chroma is set, zero-pad to expected
+            // size as a compatibility escape hatch for streams that don't
+            // properly signal monochrome (e.g. lessAVC odd-dimension mono).
+            if self.opts.tolerate_truncated_chroma {
+                let mut u_buf = alloc::vec![0u8; chroma_samples];
+                let u_copy = core::cmp::min(f.u.len(), chroma_samples);
+                u_buf[..u_copy].copy_from_slice(&f.u[..u_copy]);
 
-            let mut v_buf = alloc::vec![0u8; chroma_samples];
-            let v_copy = core::cmp::min(f.v.len(), chroma_samples);
-            v_buf[..v_copy].copy_from_slice(&f.v[..v_copy]);
+                let mut v_buf = alloc::vec![0u8; chroma_samples];
+                let v_copy = core::cmp::min(f.v.len(), chroma_samples);
+                v_buf[..v_copy].copy_from_slice(&f.v[..v_copy]);
 
-            if self.wants_nv12() {
-                let uv = interleave_uv_nv12(&u_buf, cw, &v_buf, cw, cw, ch)?;
-                VideoFrame::new_nv12_u8(f.width, f.height, w, cw * 2, y_visible.to_vec(), uv)
+                if self.wants_nv12() {
+                    let uv = interleave_uv_nv12(&u_buf, cw, &v_buf, cw, cw, ch)?;
+                    VideoFrame::new_nv12_u8(f.width, f.height, w, cw * 2, y_visible.to_vec(), uv)
+                        .with_pts(pts)
+                } else {
+                    VideoFrame::new_yuv420_u8(
+                        f.width, f.height, w, cw, cw,
+                        y_visible.to_vec(), u_buf, v_buf,
+                    )
                     .with_pts(pts)
+                }
             } else {
-                VideoFrame::new_yuv420_u8(
-                    f.width, f.height, w, cw, cw,
-                    y_visible.to_vec(), u_buf, v_buf,
-                )
-                .with_pts(pts)
+                require_plane_len(f.u.len(), cw, cw, ch, "H.264: U plane too short")?;
+                require_plane_len(f.v.len(), cw, cw, ch, "H.264: V plane too short")?;
+
+                if self.wants_nv12() {
+                    let uv = interleave_uv_nv12(&f.u, cw, &f.v, cw, cw, ch)?;
+                    VideoFrame::new_nv12_u8(f.width, f.height, w, cw * 2, y_visible.to_vec(), uv)
+                        .with_pts(pts)
+                } else {
+                    VideoFrame::new_yuv420_u8(
+                        f.width, f.height, w, cw, cw,
+                        y_visible.to_vec(), f.u.to_vec(), f.v.to_vec(),
+                    )
+                    .with_pts(pts)
+                }
             }
         };
 
         let gop = self.idr_count;
         self.pending.push(OrderedFrame { gop, poc, frame });
         Ok(())
+    }
+
+    fn flush_ready_frames(&mut self) {
+        if self.pending.len() <= 1 {
+            return;
+        }
+        self.pending.sort_by(|a, b| a.poc.cmp(&b.poc));
+        let max_poc = self.pending.last().unwrap().poc;
+        let mut ready = Vec::new();
+        let mut remaining = Vec::new();
+        for f in self.pending.drain(..) {
+            if f.poc < max_poc {
+                ready.push(f);
+            } else {
+                remaining.push(f);
+            }
+        }
+        self.pending = remaining;
+        for ordered in ready {
+            self.queued.push_back(ordered.frame);
+        }
     }
 
     fn flush_pending_for_gop(&mut self, gop: u32) {
@@ -146,6 +184,11 @@ impl RustH264Decoder {
             Ok(None) => {}
             Err(e) => return Err(Self::map_err(e)),
         }
+
+        // Continuous flush: emit all pending frames except the one with the
+        // highest POC — ensures frames flow with minimal latency while
+        // preserving POC order.
+        self.flush_ready_frames();
 
         // IDR handling fires once per IDR access unit, not once per slice NAL.
         // A multi-slice IDR stream may have several SliceIdr NALs; only the
@@ -260,7 +303,7 @@ impl VideoDecoder for RustH264Decoder {
         Ok(())
     }
 
-    fn reset(&mut self) {
+    fn reset(&mut self) -> Result<()> {
         self.dec = Inner::new();
         self.queued.clear();
         self.pending.clear();
@@ -270,14 +313,15 @@ impl VideoDecoder for RustH264Decoder {
         self.avcc_length_size = None;
 
         if matches!(self.nal_format, NalFormat::Avcc { .. }) {
-            let _ = self.prime_with_avcc_extradata();
+            self.prime_with_avcc_extradata()?;
         }
+        Ok(())
     }
 
-    fn output_format(&self) -> VideoOutputFormat {
+    fn requested_output_format(&self) -> VideoOutputFormat {
         // NOTE: if the stream is monochrome the returned frame will be
-        // PixelFormat::Gray, not Yuv420. output_format() returns the
-        // *requested* format; check the frame's pixfmt for actual format.
+        // PixelFormat::Gray, not Yuv420. requested_output_format() returns
+        // the *requested* format; check the frame's pixfmt for actual format.
         VideoOutputFormat::Yuv420
     }
 }

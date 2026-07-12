@@ -10,5 +10,5 @@ default = ["std"]
 std = ["videoson-core/std"]
 
 [dependencies]
-videoson-core = { path = "../videoson-core", default-features = false }
+videoson-core.workspace = true
 rav1d-safe = "0.5"
