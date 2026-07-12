@@ -1,9 +1,10 @@
+//! It emits from in decode order, the player using this should reorder them according to pts
+
 extern crate alloc;
 
 use alloc::borrow::Cow;
 use alloc::collections::VecDeque;
 use alloc::vec::Vec;
-use core::cmp::Ordering;
 
 use rust_h265::{Decoder, NalUnit, NalUnitType, parse_annex_b};
 
@@ -87,22 +88,13 @@ fn parse_hvcc(data: &[u8], length_size: u8) -> Vec<NalUnit<'_>> {
     nals
 }
 
-struct OrderedFrame {
-    gop: u32,
-    poc: i32,
-    frame: VideoFrame,
-}
-
 pub struct RustH265Decoder {
     params: VideoCodecParams,
     opts: VideoDecoderOptions,
     nal_format: NalFormat,
     dec: Decoder,
     queued: VecDeque<VideoFrame>,
-    pending: Vec<OrderedFrame>,
-    idr_count: u32,
     hvcc_length_size: Option<u8>,
-    last_emitted_poc: Option<i32>,
 }
 
 impl RustH265Decoder {
@@ -124,8 +116,6 @@ impl RustH265Decoder {
         let cw = (w + 1) / 2;
         let ch = (h + 1) / 2;
         let bd = f.bit_depth;
-        let poc = f.pic_order_cnt;
-        let gop = self.idr_count;
 
         let frame: VideoFrame = match bd {
             8 => self.make_frame_u8(f, w, h, cw, ch, pts)?,
@@ -133,7 +123,7 @@ impl RustH265Decoder {
             _ => return Ok(()),
         };
 
-        self.pending.push(OrderedFrame { gop, poc, frame });
+        self.queued.push_back(frame);
         Ok(())
     }
 
@@ -187,51 +177,7 @@ impl RustH265Decoder {
         }
     }
 
-    fn flush_pending_for_gop(&mut self, gop: u32) {
-        let mut gop_frames = Vec::new();
-        let mut remaining = Vec::new();
-        for f in self.pending.drain(..) {
-            if f.gop == gop {
-                gop_frames.push(f);
-            } else {
-                remaining.push(f);
-            }
-        }
-        self.pending = remaining;
-
-        gop_frames.sort_by(|a, b| match a.gop.cmp(&b.gop) {
-            Ordering::Equal => a.poc.cmp(&b.poc),
-            other => other,
-        });
-        for ordered in gop_frames {
-            self.queued.push_back(ordered.frame);
-        }
-    }
-
-    fn try_drain_pending(&mut self) {
-        if self.pending.is_empty() {
-            return;
-        }
-        self.pending.sort_by(|a, b| a.poc.cmp(&b.poc));
-
-        while !self.pending.is_empty() {
-            let next_poc = self.pending[0].poc;
-            let can_emit = match self.last_emitted_poc {
-                None => next_poc == 0,
-                Some(last) => next_poc > last,
-            };
-            if !can_emit {
-                break;
-            }
-            let ordered = self.pending.remove(0);
-            self.last_emitted_poc = Some(ordered.poc);
-            self.queued.push_back(ordered.frame);
-        }
-    }
-
     fn feed_nal(&mut self, nal: &NalUnit<'_>, pts: Option<i64>) -> Result<()> {
-        let is_idr = nal.nal_unit_type.is_idr();
-
         match self.dec.decode_nal(nal) {
             Ok(Some(frame)) => {
                 self.push_frame(frame, pts)?;
@@ -239,17 +185,6 @@ impl RustH265Decoder {
             Ok(None) => {}
             Err(e) => return Err(Self::map_err(e)),
         }
-
-        if is_idr {
-            if self.idr_count > 0 {
-                let prev_gop = self.idr_count - 1;
-                self.flush_pending_for_gop(prev_gop);
-            }
-            self.idr_count += 1;
-            self.last_emitted_poc = None;
-        }
-
-        self.try_drain_pending();
         Ok(())
     }
 
@@ -307,10 +242,7 @@ impl VideoDecoder for RustH265Decoder {
             nal_format,
             dec: Decoder::new(),
             queued: VecDeque::new(),
-            pending: Vec::new(),
-            idr_count: 0,
             hvcc_length_size: None,
-            last_emitted_poc: None,
         };
 
         if matches!(me.nal_format, NalFormat::Hvcc { .. }) {
@@ -341,24 +273,13 @@ impl VideoDecoder for RustH265Decoder {
         if let Some(frame) = self.dec.flush() {
             self.push_frame(frame, None)?;
         }
-
-        self.pending.sort_by(|a, b| match a.gop.cmp(&b.gop) {
-            Ordering::Equal => a.poc.cmp(&b.poc),
-            other => other,
-        });
-        for ordered in self.pending.drain(..) {
-            self.queued.push_back(ordered.frame);
-        }
         Ok(())
     }
 
     fn reset(&mut self) {
         self.dec = Decoder::new();
         self.queued.clear();
-        self.pending.clear();
-        self.idr_count = 0;
         self.hvcc_length_size = None;
-        self.last_emitted_poc = None;
 
         if matches!(self.nal_format, NalFormat::Hvcc { .. }) {
             let _ = self.prime_with_hvcc_extradata();
