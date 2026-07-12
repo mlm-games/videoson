@@ -3,7 +3,7 @@ extern crate alloc;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 
-use crate::{CodecType, Result, VideoCodecParams, VideoDecoder, VideoDecoderOptions};
+use crate::{CodecType, Result, VideoCodecParams, VideoDecoder, VideoDecoderOptions, VideosonError};
 
 pub struct SupportedVideoCodec {
     pub codec_type: CodecType,
@@ -34,6 +34,12 @@ pub struct CodecRegistry {
     video: Vec<RegisteredVideoDecoder>,
 }
 
+impl Default for CodecRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CodecRegistry {
     pub fn new() -> Self {
         Self { video: Vec::new() }
@@ -48,15 +54,14 @@ impl CodecRegistry {
 
     pub fn make_video_decoder(
         &self,
-        codec_type: CodecType,
         params: &VideoCodecParams,
         opts: &VideoDecoderOptions,
-    ) -> Option<Result<Box<dyn VideoDecoder>>> {
+    ) -> Result<Box<dyn VideoDecoder>> {
         for reg in &self.video {
-            if reg.supported.iter().any(|s| s.codec_type == codec_type) {
-                return Some((reg.factory)(params, opts));
+            if reg.supported.iter().any(|s| s.codec_type == params.codec) {
+                return (reg.factory)(params, opts);
             }
         }
-        None
+        Err(VideosonError::Unsupported("no decoder registered for codec"))
     }
 }

@@ -113,6 +113,13 @@ impl Rav1dSafeDecoder {
         matches!(self.opts.output_format, VideoOutputFormat::Nv12)
     }
 
+    fn is_mono(&self, frame: &Frame) -> bool {
+        match frame.planes() {
+            Planes::Depth8(planes) => planes.u().is_none() && planes.v().is_none(),
+            Planes::Depth16(planes) => planes.u().is_none() && planes.v().is_none(),
+        }
+    }
+
     fn frame_to_video_frame(&self, frame: &Frame, pts: Option<i64>) -> Result<VideoFrame> {
         let h = frame.height() as usize;
         let w = frame.width() as usize;
@@ -120,11 +127,8 @@ impl Rav1dSafeDecoder {
         match frame.planes() {
             Planes::Depth8(planes) => {
                 let y_plane = planes.y();
-                let u_plane = planes.u().unwrap_or_else(|| planes.y());
-                let v_plane = planes.v().unwrap_or_else(|| planes.y());
-
-                let u_stride = u_plane.row(0).len();
-                let v_stride = v_plane.row(0).len();
+                let cw = (w + 1) / 2;
+                let ch = (h + 1) / 2;
 
                 // Pack Y tightly to width.
                 let mut y_data = Vec::with_capacity(w * h);
@@ -134,17 +138,25 @@ impl Rav1dSafeDecoder {
                     y_data.extend_from_slice(&row_bytes[..take]);
                 }
 
-                let cw = (w + 1) / 2;
-                let ch = (h + 1) / 2;
+                if self.is_mono(frame) {
+                    return Ok(
+                        VideoFrame::new_mono_u8(frame.width(), frame.height(), w, y_data)
+                            .with_pts(pts),
+                    );
+                }
 
                 if self.wants_nv12() {
+                    let u_plane = planes.u().unwrap();
+                    let v_plane = planes.v().unwrap();
+                    let u_stride = u_plane.row(0).len();
+                    let v_stride = v_plane.row(0).len();
                     let mut u_tmp = Vec::with_capacity(u_stride * ch);
                     let mut v_tmp = Vec::with_capacity(v_stride * ch);
                     for row in 0..ch {
                         u_tmp.extend_from_slice(u_plane.row(row));
                         v_tmp.extend_from_slice(v_plane.row(row));
                     }
-                    let uv = interleave_uv_nv12(&u_tmp, u_stride, &v_tmp, v_stride, cw, ch);
+                    let uv = interleave_uv_nv12(&u_tmp, u_stride, &v_tmp, v_stride, cw, ch)?;
                     Ok(VideoFrame::new_nv12_u8(
                         frame.width(),
                         frame.height(),
@@ -155,6 +167,8 @@ impl Rav1dSafeDecoder {
                     )
                     .with_pts(pts))
                 } else {
+                    let u_plane = planes.u().unwrap();
+                    let v_plane = planes.v().unwrap();
                     let mut u_data = Vec::with_capacity(cw * ch);
                     let mut v_data = Vec::with_capacity(cw * ch);
                     for row in 0..ch {

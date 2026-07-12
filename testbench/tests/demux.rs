@@ -1,5 +1,6 @@
 use anyhow::Result;
 
+use videoson_core::Demuxer;
 use videoson_format_ivf::IvfDemuxer;
 
 fn read_test_file(name: &str) -> Vec<u8> {

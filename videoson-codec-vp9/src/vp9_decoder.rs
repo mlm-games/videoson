@@ -1,3 +1,9 @@
+// NOTE: The underlying oxideav-vp9 crate only supports batch/sequence decode
+// (decode_vp9_sequence). This means all packets are buffered and decoded at
+// EOS (stutter for few vids), no streaming frames are produced between send_packet calls.
+// This is a known limitation; the decoder behaves correctly within that
+// constraint.
+
 extern crate alloc;
 
 use alloc::collections::VecDeque;
@@ -44,7 +50,7 @@ fn convert_frame(
         let v_data = pack_u16_to_u8(&f.v);
 
         if opts.output_format == VideoOutputFormat::Nv12 {
-            let uv = interleave_uv_nv12(&u_data, cw, &v_data, cw, cw, ch);
+            let uv = interleave_uv_nv12(&u_data, cw, &v_data, cw, cw, ch)?;
             Ok(VideoFrame::new_nv12_u8(f.width, f.height, w, cw * 2, y, uv).with_pts(pts))
         } else {
             Ok(

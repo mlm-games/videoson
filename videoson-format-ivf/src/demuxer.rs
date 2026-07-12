@@ -56,7 +56,7 @@ impl IvfDemuxer {
         self.file_header.codec.to_codec_type()
     }
 
-    pub fn next_packet(
+    fn read_next_packet(
         &mut self,
     ) -> core::result::Result<Option<Packet>, videoson_core::VideosonError> {
         let remaining = self.data.len().saturating_sub(self.pos);
@@ -107,7 +107,7 @@ impl IvfDemuxer {
             let fh_buf = &self.data[self.pos..self.pos + IVF_FRAME_HEADER_LEN];
             let frame_hdr = IvfFrameHeader::parse(fh_buf)?;
 
-            if frame_hdr.timestamp > target_ts {
+            if frame_hdr.timestamp >= target_ts {
                 break;
             }
 
@@ -136,6 +136,6 @@ impl Demuxer for IvfDemuxer {
     }
 
     fn next_packet(&mut self) -> videoson_core::Result<Option<Packet>> {
-        self.next_packet()
+        self.read_next_packet()
     }
 }

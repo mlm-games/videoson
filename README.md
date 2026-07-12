@@ -1,6 +1,6 @@
 # videoson
 
-A Rust video decode wrapper, with it's workspace design being inspired by Symphonia.
+A Rust video decode wrapper, with its workspace design being inspired by Symphonia.
 
 ## Workspace Crates
 
@@ -28,9 +28,24 @@ A Rust video decode wrapper, with it's workspace design being inspired by Sympho
 
 ```rust
 use videoson::default_registry;
+use videoson_core::{VideoCodecParams, VideoDecoderOptions, CodecType};
 
 let registry = videoson::default_registry();
+let params = VideoCodecParams::new(CodecType::H264);
+let opts = VideoDecoderOptions::default();
 let mut decoder = registry
-    .make_video_decoder(&params, &opts)?
+    .make_video_decoder(&params, &opts)
     .expect("no decoder registered");
 ```
+
+## Features
+
+| Feature | Dependencies | Default? |
+|---|---|---|
+| `std` | Standard library support | yes |
+| `h264` | H.264 decoder (via `rust_h264`) | yes |
+| `h265` | H.265/HEVC decoder (via `rust_h265`) | no |
+| `vp8` | VP8 decoder (via `oxideav-vp8`) | no |
+| `vp9` | VP9 decoder (via `oxideav-vp9`) | no |
+| `rav1d` | AV1 decoder (via `rav1d-safe`, **GPLv3**) | no |
+| `ivf` | IVF demuxer | yes |

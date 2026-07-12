@@ -3,7 +3,7 @@ extern crate alloc;
 use alloc::vec;
 use alloc::vec::Vec;
 
-use crate::{PixelFormat, VideoFramePlanes};
+use crate::{PixelFormat, Result, VideoFramePlanes, VideosonError};
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct ColorInfo {
@@ -30,6 +30,9 @@ impl PlaneData {
 
 #[derive(Debug, Clone)]
 pub struct VideoPlane {
+    /// Stride in **samples** (not bytes).
+    /// For U8 data, stride == bytes per row.
+    /// For U16 data, stride == number of u16 samples per row.
     pub stride: usize,
     pub data: PlaneData,
 }
@@ -108,6 +111,42 @@ impl VideoFrame {
         }
     }
 
+    pub fn new_yuv420_u16(
+        width: u32,
+        height: u32,
+        y_stride: usize,
+        u_stride: usize,
+        v_stride: usize,
+        y: Vec<u16>,
+        u: Vec<u16>,
+        v: Vec<u16>,
+        bit_depth: u8,
+    ) -> Self {
+        Self {
+            width,
+            height,
+            planes: VideoFramePlanes::Yuv420,
+            pixfmt: PixelFormat::Yuv420,
+            bit_depth,
+            pts: None,
+            plane_data: vec![
+                VideoPlane {
+                    stride: y_stride,
+                    data: PlaneData::U16(y),
+                },
+                VideoPlane {
+                    stride: u_stride,
+                    data: PlaneData::U16(u),
+                },
+                VideoPlane {
+                    stride: v_stride,
+                    data: PlaneData::U16(v),
+                },
+            ],
+            color_info: ColorInfo::default(),
+        }
+    }
+
     pub fn new_nv12_u8(
         width: u32,
         height: u32,
@@ -137,6 +176,8 @@ impl VideoFrame {
         }
     }
 
+    /// P010 semi-planar: Y plane (u16 samples) + interleaved UV plane (u16 samples).
+    /// `bit_depth` is forced to 10 (per P010 spec).
     pub fn new_p010_u16(
         width: u32,
         height: u32,
@@ -174,17 +215,23 @@ pub fn interleave_uv_nv12(
     v_stride: usize,
     uv_w: usize,
     uv_h: usize,
-) -> Vec<u8> {
+) -> Result<Vec<u8>> {
     let mut uv = Vec::with_capacity(uv_w * uv_h * 2);
     for row in 0..uv_h {
         let u_base = row * u_stride;
         let v_base = row * v_stride;
         for col in 0..uv_w {
-            uv.push(*u.get(u_base + col).unwrap_or(&128));
-            uv.push(*v.get(v_base + col).unwrap_or(&128));
+            let u_val = u.get(u_base + col).ok_or(VideosonError::InvalidData(
+                "interleave_uv_nv12: u plane too short",
+            ))?;
+            let v_val = v.get(v_base + col).ok_or(VideosonError::InvalidData(
+                "interleave_uv_nv12: v plane too short",
+            ))?;
+            uv.push(*u_val);
+            uv.push(*v_val);
         }
     }
-    uv
+    Ok(uv)
 }
 
 /// Copy `height` rows of `width` bytes from a strided source into a
