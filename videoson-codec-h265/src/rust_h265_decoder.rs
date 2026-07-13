@@ -171,7 +171,7 @@ impl RustH265Decoder {
         // This fixes mis-muxed files where the container PTS assumes B-frame
         // reordering but the bitstream has no B-frames (POC is sequential).
         let pts = if self.frame_duration_us > 0 {
-            Some(poc as i64 * self.frame_duration_us as i64 * 1000)
+            Some(poc as i64 * self.frame_duration_us as i64 * 1000) // Miniter uses nanosecs for precision...
         } else {
             pts
         };
