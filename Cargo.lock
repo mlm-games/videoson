@@ -386,7 +386,7 @@ checksum = "fbedf5e104105e8783a77926f1e212ea37e78fd3b38b2c928938a283d083d6f1"
 [[package]]
 name = "rust_h265"
 version = "0.1.0"
-source = "git+https://github.com/mlm-games/rust_h265#1d88bd0818c3376563cb15c11d84260b4b464874"
+source = "git+https://github.com/mlm-games/rust_h265#83439e1506f49ac786d8d48e04310a8ea0a66d55"
 
 [[package]]
 name = "safe_unaligned_simd"
@@ -659,6 +659,6 @@ dependencies = [
 
 [[package]]
 name = "zmij"
-version = "1.0.21"
+version = "1.0.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b8848ee67ecc8aedbaf3e4122217aff892639231befc6a1b58d29fff4c2cabaa"
+checksum = "bd2f034a4bebf216c9e4b7083603e024cf930873fd67830cfb083c9fa33129d9"
