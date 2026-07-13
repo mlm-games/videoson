@@ -147,11 +147,22 @@ impl RustH265Decoder {
     }
 
     fn flush_ready_frames(&mut self) {
-        if self.pending.is_empty() {
+        if self.pending.len() <= 1 {
             return;
         }
         self.pending.sort_by(|a, b| a.poc.cmp(&b.poc));
-        for ordered in self.pending.drain(..) {
+        let max_poc = self.pending.last().unwrap().poc;
+        let mut ready = Vec::new();
+        let mut remaining = Vec::new();
+        for f in self.pending.drain(..) {
+            if f.poc < max_poc {
+                ready.push(f);
+            } else {
+                remaining.push(f);
+            }
+        }
+        self.pending = remaining;
+        for ordered in ready {
             self.queued.push_back(ordered.frame);
         }
     }
@@ -276,19 +287,6 @@ impl RustH265Decoder {
     fn feed_nal(&mut self, nal: &NalUnit<'_>, pts: Option<i64>) -> Result<()> {
         let is_irap = nal.nal_unit_type.is_irap();
 
-        // GOP boundary detection: MUST run before decode_nal so that the
-        // IRAP frame (returned by decode_nal) gets the new GOP count.
-        // Otherwise flush_ready_frames mixes frames from different GOPs,
-        // causing the new IRAP (POC=0) to be emitted before the old GOP's
-        // held-back max-POC frame — visible as wrong-frame-order stutter.
-        if is_irap && !self.in_irap_picture {
-            if self.pending.iter().any(|f| f.gop == self.gop_count) {
-                self.flush_pending_for_gop(self.gop_count);
-            }
-            self.gop_count += 1;
-            self.in_irap_picture = true;
-        }
-
         self.dec.set_pending_pts(pts);
 
         let dec_result = self.dec.decode_nal(nal);
@@ -303,10 +301,19 @@ impl RustH265Decoder {
         }
 
         // Continuous flush: emit all pending frames except the one with the
-        // highest POC.  After the GOP handler above, pending only contains
-        // frames from the current GOP, so the max-POC frame is always from
-        // the correct GOP.
+        // highest POC - ensures frames flow with minimal latency while
+        // preserving POC order.
         self.flush_ready_frames();
+
+        // IRAP/GOP handling fires once per IRAP access unit, not per NAL.
+        // Flush the old GOP before starting the new one.
+        if is_irap && !self.in_irap_picture {
+            if self.pending.iter().any(|f| f.gop == self.gop_count) {
+                self.flush_pending_for_gop(self.gop_count);
+            }
+            self.gop_count += 1;
+            self.in_irap_picture = true;
+        }
 
         // Clear the IRAP guard on the first non-IRAP VCL NAL.
         if nal.nal_unit_type.is_vcl() && !is_irap {
