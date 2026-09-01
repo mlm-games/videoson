@@ -118,6 +118,8 @@ pub struct RustH265Decoder {
     /// Frame duration in microseconds, used to recompute PTS from POC.
     /// 0 means "not set" (fall back to container PTS).
     frame_duration_us: u64,
+    /// Base PTS (microseconds) for POC-based recomputation: first container PTS seen.
+    pts_base: Option<i64>,
 }
 
 impl RustH265Decoder {
@@ -177,12 +179,18 @@ impl RustH265Decoder {
         }
     }
 
-    fn push_frame(&mut self, f: rust_h265::decoder::Frame, poc: i32, pts: Option<i64>) -> Result<()> {
+    fn push_frame(
+        &mut self,
+        f: rust_h265::decoder::Frame,
+        poc: i32,
+        pts: Option<i64>,
+    ) -> Result<()> {
         // Correct PTS from POC when frame_duration_us is available.
         // This fixes mis-muxed files where the container PTS assumes B-frame
         // reordering but the bitstream has no B-frames (POC is sequential).
         let pts = if self.frame_duration_us > 0 {
-            Some(poc as i64 * self.frame_duration_us as i64 * 1000) // Miniter uses nanosecs for precision...
+            let base = self.pts_base.unwrap_or(0);
+            Some(base.saturating_add((poc as i64).saturating_mul(self.frame_duration_us as i64)))
         } else {
             pts
         };
@@ -195,11 +203,7 @@ impl RustH265Decoder {
         let mut frame: VideoFrame = match bd {
             8 => self.make_frame_u8(f, w, h, cw, ch, pts)?,
             10 | 12 => self.make_frame_u16(f, w, h, cw, ch, bd, pts)?,
-            _ => {
-                return Err(VideosonError::Unsupported(
-                    "H.265: unsupported bit depth",
-                ))
-            }
+            _ => return Err(VideosonError::Unsupported("H.265: unsupported bit depth")),
         };
         frame.poc = Some(poc);
 
@@ -209,9 +213,7 @@ impl RustH265Decoder {
     }
 
     fn check_chroma_420(&self, u_len: usize, v_len: usize, cw: usize, ch: usize) -> Result<()> {
-        if (u_len > 0 && (u_len / cw.max(1)) > ch)
-            || (v_len > 0 && (v_len / cw.max(1)) > ch)
-        {
+        if (u_len > 0 && (u_len / cw.max(1)) > ch) || (v_len > 0 && (v_len / cw.max(1)) > ch) {
             return Err(VideosonError::Unsupported(
                 "H.265: only 4:2:0 chroma is supported",
             ));
@@ -244,11 +246,17 @@ impl RustH265Decoder {
 
         if self.wants_nv12() {
             let uv = interleave_uv_nv12(&u, cw, &v, cw, cw, ch)?;
-            Ok(VideoFrame::new_nv12_u8(f.width, f.height, w, cw * 2, y.to_vec(), uv)
-                .with_pts(pts))
+            Ok(VideoFrame::new_nv12_u8(f.width, f.height, w, cw * 2, y.to_vec(), uv).with_pts(pts))
         } else {
             Ok(VideoFrame::new_yuv420_u8(
-                f.width, f.height, w, cw, cw, y.to_vec(), u.to_vec(), v.to_vec(),
+                f.width,
+                f.height,
+                w,
+                cw,
+                cw,
+                y.to_vec(),
+                u.to_vec(),
+                v.to_vec(),
             )
             .with_pts(pts))
         }
@@ -279,13 +287,26 @@ impl RustH265Decoder {
         self.check_chroma_420(u.len(), v.len(), cw, ch)?;
 
         Ok(VideoFrame::new_yuv420_u16(
-            f.width, f.height, w, cw, cw, y.to_vec(), u.to_vec(), v.to_vec(), bd,
+            f.width,
+            f.height,
+            w,
+            cw,
+            cw,
+            y.to_vec(),
+            u.to_vec(),
+            v.to_vec(),
+            bd,
         )
         .with_pts(pts))
     }
 
     fn feed_nal(&mut self, nal: &NalUnit<'_>, pts: Option<i64>) -> Result<()> {
         let is_irap = nal.nal_unit_type.is_irap();
+
+        // Track base PTS for POC-based recomputation when frame_duration_us is set.
+        if self.frame_duration_us > 0 {
+            self.pts_base = self.pts_base.or(pts);
+        }
 
         self.dec.set_pending_pts(pts);
 
@@ -398,6 +419,7 @@ impl VideoDecoder for RustH265Decoder {
             hvcc_length_size: None,
             pending_pts: None,
             frame_duration_us: 0,
+            pts_base: None,
         };
 
         if matches!(me.nal_format, NalFormat::Hvcc { .. }) {
@@ -443,6 +465,7 @@ impl VideoDecoder for RustH265Decoder {
         self.hvcc_length_size = None;
         self.pending_pts = None;
         self.frame_duration_us = 0;
+        self.pts_base = None;
 
         if matches!(self.nal_format, NalFormat::Hvcc { .. }) {
             self.prime_with_hvcc_extradata()?;

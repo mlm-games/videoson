@@ -66,55 +66,86 @@ impl RustH264Decoder {
             let cw = (w + 1) / 2;
             let ch = (h + 1) / 2;
             let chroma_samples = cw * ch;
-
-            // Non-4:2:0 detection: if U/V plane byte count implies a chroma
-            // height greater than ch (4:2:2 or 4:4:4), reject.
-            if (!f.u.is_empty() && (f.u.len() / cw.max(1)) > ch)
-                || (!f.v.is_empty() && (f.v.len() / cw.max(1)) > ch)
+            // Treat this as monochrome even without tolerate_truncated_chroma.
+            let floor_samples = (w / 2) * (h / 2);
+            if f.u.len() == floor_samples
+                && f.v.len() == floor_samples
+                && floor_samples != chroma_samples
             {
-                return Err(VideosonError::Unsupported(
-                    "H.264: only 4:2:0 chroma is supported",
-                ));
-            }
-
-            // Chroma plane validation (strict by default).
-            // When tolerate_truncated_chroma is set, zero-pad to expected
-            // size as a compatibility escape hatch for streams that don't
-            // properly signal monochrome (e.g. lessAVC odd-dimension mono).
-            if self.opts.tolerate_truncated_chroma {
-                let mut u_buf = alloc::vec![0u8; chroma_samples];
-                let u_copy = core::cmp::min(f.u.len(), chroma_samples);
-                u_buf[..u_copy].copy_from_slice(&f.u[..u_copy]);
-
-                let mut v_buf = alloc::vec![0u8; chroma_samples];
-                let v_copy = core::cmp::min(f.v.len(), chroma_samples);
-                v_buf[..v_copy].copy_from_slice(&f.v[..v_copy]);
-
-                if self.wants_nv12() {
-                    let uv = interleave_uv_nv12(&u_buf, cw, &v_buf, cw, cw, ch)?;
-                    VideoFrame::new_nv12_u8(f.width, f.height, w, cw * 2, y_visible.to_vec(), uv)
-                        .with_pts(pts)
-                } else {
-                    VideoFrame::new_yuv420_u8(
-                        f.width, f.height, w, cw, cw,
-                        y_visible.to_vec(), u_buf, v_buf,
-                    )
-                    .with_pts(pts)
-                }
+                VideoFrame::new_mono_u8(f.width, f.height, w, y_visible.to_vec()).with_pts(pts)
             } else {
-                require_plane_len(f.u.len(), cw, cw, ch, "H.264: U plane too short")?;
-                require_plane_len(f.v.len(), cw, cw, ch, "H.264: V plane too short")?;
+                // Non-4:2:0 detection: if U/V plane byte count implies a chroma
+                // height greater than ch (4:2:2 or 4:4:4), reject.
+                if (!f.u.is_empty() && (f.u.len() / cw.max(1)) > ch)
+                    || (!f.v.is_empty() && (f.v.len() / cw.max(1)) > ch)
+                {
+                    return Err(VideosonError::Unsupported(
+                        "H.264: only 4:2:0 chroma is supported",
+                    ));
+                }
 
-                if self.wants_nv12() {
-                    let uv = interleave_uv_nv12(&f.u, cw, &f.v, cw, cw, ch)?;
-                    VideoFrame::new_nv12_u8(f.width, f.height, w, cw * 2, y_visible.to_vec(), uv)
+                // Chroma plane validation (strict by default).
+                if self.opts.tolerate_truncated_chroma {
+                    let mut u_buf = alloc::vec![0u8; chroma_samples];
+                    let u_copy = core::cmp::min(f.u.len(), chroma_samples);
+                    u_buf[..u_copy].copy_from_slice(&f.u[..u_copy]);
+
+                    let mut v_buf = alloc::vec![0u8; chroma_samples];
+                    let v_copy = core::cmp::min(f.v.len(), chroma_samples);
+                    v_buf[..v_copy].copy_from_slice(&f.v[..v_copy]);
+
+                    if self.wants_nv12() {
+                        let uv = interleave_uv_nv12(&u_buf, cw, &v_buf, cw, cw, ch)?;
+                        VideoFrame::new_nv12_u8(
+                            f.width,
+                            f.height,
+                            w,
+                            cw * 2,
+                            y_visible.to_vec(),
+                            uv,
+                        )
                         .with_pts(pts)
+                    } else {
+                        VideoFrame::new_yuv420_u8(
+                            f.width,
+                            f.height,
+                            w,
+                            cw,
+                            cw,
+                            y_visible.to_vec(),
+                            u_buf,
+                            v_buf,
+                        )
+                        .with_pts(pts)
+                    }
                 } else {
-                    VideoFrame::new_yuv420_u8(
-                        f.width, f.height, w, cw, cw,
-                        y_visible.to_vec(), f.u.to_vec(), f.v.to_vec(),
-                    )
-                    .with_pts(pts)
+                    require_plane_len(f.u.len(), cw, cw, ch, "H.264: U plane too short")?;
+                    require_plane_len(f.v.len(), cw, cw, ch, "H.264: V plane too short")?;
+
+                    if self.wants_nv12() {
+                        let uv = interleave_uv_nv12(&f.u, cw, &f.v, cw, cw, ch)?;
+                        VideoFrame::new_nv12_u8(
+                            f.width,
+                            f.height,
+                            w,
+                            cw * 2,
+                            y_visible.to_vec(),
+                            uv,
+                        )
+                        .with_pts(pts)
+                    } else {
+                        VideoFrame::new_yuv420_u8(
+                            f.width,
+                            f.height,
+                            w,
+                            cw,
+                            cw,
+                            y_visible.to_vec(),
+                            f.u.to_vec(),
+                            f.v.to_vec(),
+                        )
+                        .with_pts(pts)
+                    }
                 }
             }
         };
