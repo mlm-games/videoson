@@ -1,16 +1,11 @@
-// NOTE: The underlying oxideav-vp9 crate only supports batch/sequence decode
-// (decode_vp9_sequence). This means all packets are buffered and decoded at
-// EOS (stutter for few vids), no streaming frames are produced between send_packet calls.
-// This is a known limitation; the decoder behaves correctly within that
-// constraint.
-
 extern crate alloc;
 
 use alloc::collections::VecDeque;
 use alloc::vec;
 use alloc::vec::Vec;
 
-use oxideav_vp9::{Vp9DecodedFrame, decode_vp9_sequence, split_superframe};
+use oxideav_core::ExecutionContext;
+use oxideav_vp9::{Vp9DecodedFrame, Vp9SequenceDecoder, split_superframe};
 
 use videoson_core::{
     CodecType, ColorInfo, Packet, PixelFormat, PlaneData, Result, VideoCodecParams, VideoDecoder,
@@ -18,16 +13,12 @@ use videoson_core::{
     VideosonError, interleave_uv_nv12, require_plane_len,
 };
 
-struct BufferedPacket {
-    data: Vec<u8>,
-    pts: Option<i64>,
-}
-
 pub struct Vp9Decoder {
     params: VideoCodecParams,
     opts: VideoDecoderOptions,
-    packets: Vec<BufferedPacket>,
+    decoder: Vp9SequenceDecoder,
     queued: VecDeque<VideoFrame>,
+    exec: ExecutionContext,
 }
 
 fn pack_u16_to_u8(src: &[u16]) -> Vec<u8> {
@@ -41,16 +32,16 @@ fn convert_frame(
 ) -> Result<VideoFrame> {
     let w = f.width as usize;
     let h = f.height as usize;
-    let cw = (w + 1) / 2;
-    let ch = (h + 1) / 2;
+    let cw = if f.subsampling_x { (w + 1) / 2 } else { w };
+    let ch = if f.subsampling_y { (h + 1) / 2 } else { h };
 
-    // Reject non-4:2:0 chroma (u16 sample count / cw = chroma height)
-    if (!f.u.is_empty() && (f.u.len() / cw.max(1)) > ch)
-        || (!f.v.is_empty() && (f.v.len() / cw.max(1)) > ch)
-    {
-        return Err(VideosonError::Unsupported(
-            "VP9: only 4:2:0 chroma is supported",
-        ));
+    if !f.subsampling_x || !f.subsampling_y {
+        let has_chroma = !f.u.is_empty() || !f.v.is_empty();
+        if has_chroma {
+            return Err(VideosonError::Unsupported(
+                "VP9: only 4:2:0 chroma is supported",
+            ));
+        }
     }
 
     require_plane_len(f.y.len(), w, w, h, "VP9: Y plane too short")?;
@@ -59,6 +50,41 @@ fn convert_frame(
     }
     if !f.v.is_empty() {
         require_plane_len(f.v.len(), cw, cw, ch, "VP9: V plane too short")?;
+    }
+
+    if f.u.is_empty() && f.v.is_empty() {
+        if f.bit_depth == 8 {
+            let y = pack_u16_to_u8(&f.y);
+            return Ok(VideoFrame {
+                width: f.width,
+                height: f.height,
+                planes: VideoFramePlanes::Mono,
+                pixfmt: PixelFormat::Gray,
+                bit_depth: 8,
+                pts,
+                plane_data: vec![VideoPlane {
+                    stride: w,
+                    data: PlaneData::U8(y),
+                }],
+                color_info: ColorInfo::default(),
+                poc: None,
+            });
+        } else {
+            return Ok(VideoFrame {
+                width: f.width,
+                height: f.height,
+                planes: VideoFramePlanes::Mono,
+                pixfmt: PixelFormat::Gray,
+                bit_depth: f.bit_depth,
+                pts,
+                plane_data: vec![VideoPlane {
+                    stride: w,
+                    data: PlaneData::U16(f.y),
+                }],
+                color_info: ColorInfo::default(),
+                poc: None,
+            });
+        }
     }
 
     if f.bit_depth == 8 {
@@ -104,35 +130,25 @@ fn convert_frame(
 }
 
 impl Vp9Decoder {
-    fn drain_packets(&mut self) -> Result<()> {
-        if self.packets.is_empty() {
-            return Ok(());
+    fn exec_from_opts(opts: &VideoDecoderOptions) -> ExecutionContext {
+        match opts.threads {
+            Some(n) => ExecutionContext::with_threads(n),
+            None => ExecutionContext::serial(),
         }
+    }
 
-        let mut all_data: Vec<Vec<u8>> = Vec::new();
-        let mut all_pts: Vec<Option<i64>> = Vec::new();
+    /// Override the thread budget after construction. Mirrors the
+    /// `oxideav_core::ExecutionContext` contract: the budget is advisory
+    /// and preserved across `reset()`.
+    pub fn set_execution_context(&mut self, exec: &ExecutionContext) {
+        self.exec = exec.clone();
+        self.decoder.set_execution_context(exec);
+    }
 
-        for pkt in self.packets.drain(..) {
-            let slices = split_superframe(&pkt.data);
-            for slice in slices {
-                all_data.push(slice.to_vec());
-                all_pts.push(pkt.pts);
-            }
-        }
-
-        let refs: Vec<&[u8]> = all_data.iter().map(|d| d.as_slice()).collect();
-        let frames = decode_vp9_sequence(&refs)
-            .map_err(|e| VideosonError::Message(alloc::format!("VP9: {e}").into()))?;
-
-        for (_i, frame) in frames.into_iter().enumerate() {
-            // PTS-per-frame is not reliable here because decode_vp9_sequence
-            // may reorder, drop, or insert frames (hidden/alt-ref).
-            // Until proper packet-to-frame mapping is implemented, drop PTS.
-            let vf = convert_frame(frame, None, &self.opts)?;
-            self.queued.push_back(vf);
-        }
-
-        Ok(())
+    /// Convenience: set thread count directly.
+    pub fn set_threads(&mut self, threads: usize) {
+        let exec = ExecutionContext::with_threads(threads);
+        self.set_execution_context(&exec);
     }
 }
 
@@ -148,11 +164,16 @@ impl VideoDecoder for Vp9Decoder {
             ));
         }
 
+        let exec = Self::exec_from_opts(opts);
+        let mut decoder = Vp9SequenceDecoder::new();
+        decoder.set_execution_context(&exec);
+
         Ok(Self {
             params: params.clone(),
             opts: *opts,
-            packets: Vec::new(),
+            decoder,
             queued: VecDeque::new(),
+            exec,
         })
     }
 
@@ -161,10 +182,17 @@ impl VideoDecoder for Vp9Decoder {
     }
 
     fn send_packet(&mut self, packet: &Packet) -> Result<()> {
-        self.packets.push(BufferedPacket {
-            data: packet.data.clone(),
-            pts: packet.pts,
-        });
+        let slices = split_superframe(&packet.data);
+        for slice in slices {
+            let maybe_frame = self
+                .decoder
+                .push_frame(slice)
+                .map_err(|e| VideosonError::Message(alloc::format!("VP9: {e}").into()))?;
+            if let Some(frame) = maybe_frame {
+                let vf = convert_frame(frame, packet.pts, &self.opts)?;
+                self.queued.push_back(vf);
+            }
+        }
         Ok(())
     }
 
@@ -173,11 +201,12 @@ impl VideoDecoder for Vp9Decoder {
     }
 
     fn send_eos(&mut self) -> Result<()> {
-        self.drain_packets()
+        Ok(())
     }
 
     fn reset(&mut self) -> Result<()> {
-        self.packets.clear();
+        self.decoder = Vp9SequenceDecoder::new();
+        self.decoder.set_execution_context(&self.exec);
         self.queued.clear();
         Ok(())
     }

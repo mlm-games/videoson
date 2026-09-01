@@ -63,10 +63,15 @@ impl VideoDecoder for Vp8Decoder {
             ));
         }
 
+        let dec = match opts.max_pixels {
+            Some(cap) => Vp8DecoderState::new().with_max_pixels_per_frame(cap),
+            None => Vp8DecoderState::new(),
+        };
+
         Ok(Self {
             params: params.clone(),
             opts: *opts,
-            dec: Vp8DecoderState::new(),
+            dec,
             queued: VecDeque::new(),
         })
     }
@@ -98,7 +103,10 @@ impl VideoDecoder for Vp8Decoder {
     }
 
     fn reset(&mut self) -> Result<()> {
-        self.dec = Vp8DecoderState::new();
+        self.dec = match self.opts.max_pixels {
+            Some(cap) => Vp8DecoderState::new().with_max_pixels_per_frame(cap),
+            None => Vp8DecoderState::new(),
+        };
         self.queued.clear();
         Ok(())
     }

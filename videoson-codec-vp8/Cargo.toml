@@ -12,4 +12,4 @@ std = ["videoson-core/std"]
 [dependencies]
 videoson-core.workspace = true
 
-oxideav-vp8 = { version = "0.2.6", default-features = false }
+oxideav-vp8 = { version = "0.2.7", default-features = false }

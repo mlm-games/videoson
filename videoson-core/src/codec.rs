@@ -80,6 +80,17 @@ pub struct VideoDecoderOptions {
     /// for streams that don't properly signal monochrome (e.g. lessAVC).
     /// Default: `false` (strict validation).
     pub tolerate_truncated_chroma: bool,
+    /// Advisory thread budget for decoders with internal parallelism
+    /// (e.g. VP9 tile-parallel decode). `None` = serial (1 thread).
+    /// `Some(n)` = at most `n` workers (`n==0` is clamped to 1).
+    /// Ignored by decoders without parallelism.
+    pub threads: Option<usize>,
+    /// Maximum allowed frame size in pixels (`width * height`). `None` uses
+    /// the decoder's built-in default (VP8: `32_768²`, never rejects a
+    /// legal 14-bit frame). Used as a DoS cap – a key frame declaring a
+    /// larger size is rejected with `ResourceExhausted` before any
+    /// allocation.
+    pub max_pixels: Option<u64>,
 }
 
 impl Default for VideoDecoderOptions {
@@ -88,6 +99,8 @@ impl Default for VideoDecoderOptions {
             verify: false,
             output_format: VideoOutputFormat::Native,
             tolerate_truncated_chroma: false,
+            threads: None,
+            max_pixels: None,
         }
     }
 }

@@ -242,9 +242,9 @@ source = "git+https://github.com/OxideAV/oxideav-bitstream#a70a423151403526a17c3
 
 [[package]]
 name = "oxideav-core"
-version = "0.1.29"
+version = "0.1.35"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "90f122ec5ab9940f06ac87f34ffd165412aaf42017bcaf8e61f592d9cca838ce"
+checksum = "3f8d0295ab8f6482bb51419d9a89adcf145fa1e654b34d2566046134aed5c424"
 dependencies = [
  "bytemuck",
  "serde_json",
@@ -253,14 +253,14 @@ dependencies = [
 
 [[package]]
 name = "oxideav-vp8"
-version = "0.2.6"
+version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "043a9d81b6c0cb1d7abb3653c53a8463063637836ed469f260bb4cc60f7ab917"
+checksum = "506f2495a728488c2fee1ee54bc7f819ca934dc3246369b4100c83848f057852"
 
 [[package]]
 name = "oxideav-vp9"
-version = "0.0.12"
-source = "git+https://github.com/OxideAV/oxideav-vp9?rev=50360260bc9aded0d6b47144de580f1e28a32220#50360260bc9aded0d6b47144de580f1e28a32220"
+version = "0.0.13"
+source = "git+https://github.com/OxideAV/oxideav-vp9?rev=a198fcaf6aa90934a07a29c310ac99b19aac547b#a198fcaf6aa90934a07a29c310ac99b19aac547b"
 dependencies = [
  "oxideav-core",
 ]
@@ -595,6 +595,7 @@ dependencies = [
 name = "videoson-codec-vp9"
 version = "0.4.0"
 dependencies = [
+ "oxideav-core",
  "oxideav-vp9",
  "videoson-core",
 ]

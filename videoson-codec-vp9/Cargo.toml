@@ -13,3 +13,4 @@ std = ["videoson-core/std"]
 videoson-core.workspace = true
 
 oxideav-vp9.workspace = true
+oxideav-core.workspace = true
