@@ -754,7 +754,7 @@ checksum = "ba73ea9cf16a25df0c8caa16c51acb937d5712a8429db78a3ee29d5dcacd3a65"
 
 [[package]]
 name = "videoson"
-version = "0.5.2"
+version = "0.5.3"
 dependencies = [
  "videoson-codec-h264",
  "videoson-codec-h265",
@@ -768,7 +768,7 @@ dependencies = [
 
 [[package]]
 name = "videoson-codec-h264"
-version = "0.5.2"
+version = "0.5.3"
 dependencies = [
  "rust_h264",
  "videoson-core",
@@ -776,7 +776,7 @@ dependencies = [
 
 [[package]]
 name = "videoson-codec-h265"
-version = "0.5.2"
+version = "0.5.3"
 dependencies = [
  "oxideav-core",
  "oxideav-h265",
@@ -786,7 +786,7 @@ dependencies = [
 
 [[package]]
 name = "videoson-codec-rav1d"
-version = "0.5.2"
+version = "0.5.3"
 dependencies = [
  "rav1d-safe",
  "videoson-core",
@@ -794,7 +794,7 @@ dependencies = [
 
 [[package]]
 name = "videoson-codec-vp8"
-version = "0.5.2"
+version = "0.5.3"
 dependencies = [
  "oxideav-vp8",
  "videoson-core",
@@ -802,7 +802,7 @@ dependencies = [
 
 [[package]]
 name = "videoson-codec-vp9"
-version = "0.5.2"
+version = "0.5.3"
 dependencies = [
  "oxideav-core",
  "oxideav-vp9",
@@ -811,15 +811,15 @@ dependencies = [
 
 [[package]]
 name = "videoson-common"
-version = "0.5.2"
+version = "0.5.3"
 
 [[package]]
 name = "videoson-core"
-version = "0.5.2"
+version = "0.5.3"
 
 [[package]]
 name = "videoson-format-ivf"
-version = "0.5.2"
+version = "0.5.3"
 dependencies = [
  "oxideav-bitstream",
  "videoson-common",
