@@ -3,6 +3,8 @@ name = "videoson-codec-h264"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
+description = "H.264 decoder for videoson (via rust_h264)"
 rust-version.workspace = true
 
 [features]

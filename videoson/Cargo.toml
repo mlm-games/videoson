@@ -3,6 +3,10 @@ name = "videoson"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
+description = "Pure-Rust video decoding facade with a pre-populated codec registry"
+keywords = ["video", "decoder", "codec", "h264", "av1"]
+categories = ["multimedia::video"]
 rust-version.workspace = true
 
 [features]

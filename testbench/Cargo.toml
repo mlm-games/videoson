@@ -7,9 +7,9 @@ rust-version = "1.93"
 publish = false
 
 [dependencies]
-anyhow = "1"
+anyhow.workspace = true
 
-less-avc = "0.1.5"
+less-avc.workspace = true
 
 videoson-core = { workspace = true, features = ["std"] }
 videoson-codec-h264 = { workspace = true, features = ["std"] }

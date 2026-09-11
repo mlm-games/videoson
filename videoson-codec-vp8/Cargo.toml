@@ -3,6 +3,8 @@ name = "videoson-codec-vp8"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
+description = "VP8 decoder for videoson (via oxideav-vp8)"
 rust-version.workspace = true
 
 [features]
@@ -12,4 +14,4 @@ std = ["videoson-core/std"]
 [dependencies]
 videoson-core.workspace = true
 
-oxideav-vp8 = { version = "0.2.7", default-features = false }
+oxideav-vp8.workspace = true

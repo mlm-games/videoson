@@ -3,6 +3,8 @@ name = "videoson-codec-rav1d"
 version.workspace = true
 edition.workspace = true
 license = "AGPL-3.0-only"
+repository.workspace = true
+description = "AV1 decoder for videoson (via rav1d-safe, AGPL-3.0-only)"
 rust-version.workspace = true
 
 [features]
@@ -11,4 +13,4 @@ std = ["videoson-core/std"]
 
 [dependencies]
 videoson-core.workspace = true
-rav1d-safe = "0.6"
+rav1d-safe.workspace = true

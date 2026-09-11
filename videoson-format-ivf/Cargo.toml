@@ -3,6 +3,8 @@ name = "videoson-format-ivf"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
+description = "IVF demuxer for videoson"
 rust-version.workspace = true
 
 [features]

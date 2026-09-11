@@ -3,6 +3,8 @@ name = "videoson-codec-vp9"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
+description = "VP9 decoder for videoson (via oxideav-vp9)"
 rust-version.workspace = true
 
 [features]

@@ -3,6 +3,8 @@ name = "videoson-common"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
+description = "Bitstream utilities for videoson: Annex B, avcC, RBSP, Exp-Golomb, BitReader"
 rust-version.workspace = true
 
 [features]
