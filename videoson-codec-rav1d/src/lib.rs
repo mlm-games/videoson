@@ -14,7 +14,9 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 #[cfg(not(feature = "std"))]
-compile_error!("videoson-codec-rav1d requires the `std` feature; `rav1d-safe` is not no_std compatible");
+compile_error!(
+    "videoson-codec-rav1d requires the `std` feature; `rav1d-safe` is not no_std compatible"
+);
 
 extern crate alloc;
 
@@ -22,11 +24,11 @@ use alloc::boxed::Box;
 use alloc::collections::VecDeque;
 use alloc::format;
 
-use rav1d_safe::{Decoder, Frame, Planes};
+use rav1d_safe::{ColorRange as Rav1dColorRange, Decoder, Frame, Planes};
 use videoson_core::{
-    CodecType, Packet, RegisterableVideoDecoder, Result, SupportedVideoCodec, VideoCodecParams,
-    VideoDecoder, VideoDecoderOptions, VideoFrame, VideoOutputFormat, VideosonError,
-    interleave_uv_nv12,
+    CodecType, ColorInfo as VideosonColorInfo, Packet, RegisterableVideoDecoder, Result,
+    SupportedVideoCodec, VideoCodecParams, VideoDecoder, VideoDecoderOptions, VideoFrame,
+    VideoOutputFormat, VideosonError, interleave_uv_nv12,
 };
 
 pub struct Rav1dSafeDecoder {
@@ -72,14 +74,7 @@ impl VideoDecoder for Rav1dSafeDecoder {
                 Ok(())
             }
             Ok(None) => Ok(()),
-            Err(e)
-                if matches!(
-                    e.error(),
-                    rav1d_safe::Error::NeedMoreData
-                ) =>
-            {
-                Ok(())
-            }
+            Err(e) if matches!(e.error(), rav1d_safe::Error::NeedMoreData) => Ok(()),
             Err(e) => Err(VideosonError::Message(format!("rav1d: {e}"))),
         }
     }
@@ -153,6 +148,7 @@ impl Rav1dSafeDecoder {
     fn frame_to_video_frame(&self, frame: &Frame, pts: Option<i64>) -> Result<VideoFrame> {
         let h = frame.height() as usize;
         let w = frame.width() as usize;
+        let color_info = rav1d_color_info(frame);
 
         match frame.planes() {
             Planes::Depth8(planes) => {
@@ -171,7 +167,8 @@ impl Rav1dSafeDecoder {
                 if self.is_mono(frame) {
                     return Ok(
                         VideoFrame::new_mono_u8(frame.width(), frame.height(), w, y_data)
-                            .with_pts(pts),
+                            .with_pts(pts)
+                            .with_color_info(color_info),
                     );
                 }
 
@@ -195,7 +192,8 @@ impl Rav1dSafeDecoder {
                         y_data,
                         uv,
                     )
-                    .with_pts(pts))
+                    .with_pts(pts)
+                    .with_color_info(color_info))
                 } else {
                     let u_plane = planes.u().unwrap();
                     let v_plane = planes.v().unwrap();
@@ -218,10 +216,21 @@ impl Rav1dSafeDecoder {
                         u_data,
                         v_data,
                     )
-                    .with_pts(pts))
+                    .with_pts(pts)
+                    .with_color_info(color_info))
                 }
             }
             Planes::Depth16(_) => Err(VideosonError::Unsupported("16-bit AV1 not supported")),
         }
+    }
+}
+
+fn rav1d_color_info(frame: &Frame) -> VideosonColorInfo {
+    let ci = frame.color_info();
+    VideosonColorInfo {
+        primaries: ci.primaries as u8,
+        transfer: ci.transfer_characteristics as u8,
+        matrix: ci.matrix_coefficients as u8,
+        full_range: matches!(ci.color_range, Rav1dColorRange::Full),
     }
 }
