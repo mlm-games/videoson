@@ -72,7 +72,14 @@ impl VideoDecoder for Rav1dSafeDecoder {
                 Ok(())
             }
             Ok(None) => Ok(()),
-            Err(rav1d_safe::Error::NeedMoreData) => Ok(()),
+            Err(e)
+                if matches!(
+                    e.error(),
+                    rav1d_safe::Error::NeedMoreData
+                ) =>
+            {
+                Ok(())
+            }
             Err(e) => Err(VideosonError::Message(format!("rav1d: {e}"))),
         }
     }

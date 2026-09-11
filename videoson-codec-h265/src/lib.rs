@@ -5,15 +5,15 @@ extern crate alloc;
 #[cfg(feature = "std")]
 extern crate std;
 
-mod rust_h265_decoder;
+mod oxideav_h265_decoder;
 
-pub use rust_h265_decoder::RustH265Decoder;
+pub use oxideav_h265_decoder::OxideH265Decoder;
 
-pub type H265Decoder = RustH265Decoder;
+pub type H265Decoder = OxideH265Decoder;
 
 use videoson_core::VideoDecoder as _;
 
-impl videoson_core::RegisterableVideoDecoder for RustH265Decoder {
+impl videoson_core::RegisterableVideoDecoder for OxideH265Decoder {
     fn try_registry_new(
         params: &videoson_core::VideoCodecParams,
         opts: &videoson_core::VideoDecoderOptions,

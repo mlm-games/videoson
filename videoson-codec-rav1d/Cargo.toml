@@ -11,4 +11,4 @@ std = ["videoson-core/std"]
 
 [dependencies]
 videoson-core.workspace = true
-rav1d-safe = "0.5"
+rav1d-safe = "0.6"
