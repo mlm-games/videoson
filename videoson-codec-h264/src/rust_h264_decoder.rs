@@ -156,11 +156,11 @@ impl RustH264Decoder {
     }
 
     fn flush_ready_frames(&mut self) {
-        if self.pending.len() <= 1 {
-            return;
-        }
         self.pending.sort_by(|a, b| a.poc.cmp(&b.poc));
-        let max_poc = self.pending.last().unwrap().poc;
+        let max_poc = match self.pending.last() {
+            Some(f) => f.poc,
+            None => return,
+        };
         let mut ready = Vec::new();
         let mut remaining = Vec::new();
         for f in self.pending.drain(..) {
@@ -173,6 +173,16 @@ impl RustH264Decoder {
         self.pending = remaining;
         for ordered in ready {
             self.queued.push_back(ordered.frame);
+        }
+        // All-IDR streams never accumulate 2+ pictures: each IDR completes
+        // the previous picture and immediately becomes the new max-POC
+        // hold-back, so nothing would emit until EOS (observed: 145/145 only
+        // at EOS on all-IDR input). An IDR access unit needs no future
+        // picture for output, so release a lone pending IDR picture here.
+        if self.pending.len() == 1 && self.in_idr_picture {
+            if let Some(only) = self.pending.pop() {
+                self.queued.push_back(only.frame);
+            }
         }
     }
 
