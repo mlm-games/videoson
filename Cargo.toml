@@ -14,21 +14,21 @@ members = [
 ]
 
 [workspace.package]
-version = "0.6.1"
+version = "0.6.2"
 edition = "2024"
 license = "MPL-2.0"
 repository = "https://github.com/mlm-games/videoson"
 rust-version = "1.93"
 
 [workspace.dependencies]
-videoson-core = { path = "videoson-core", version = "0.6.1", default-features = false }
-videoson-common = { path = "videoson-common", version = "0.6.1", default-features = false }
-videoson-codec-h264 = { path = "videoson-codec-h264", version = "0.6.1", default-features = false }
-videoson-codec-h265 = { path = "videoson-codec-h265", version = "0.6.1", default-features = false }
-videoson-codec-vp8 = { path = "videoson-codec-vp8", version = "0.6.1", default-features = false }
-videoson-codec-vp9 = { path = "videoson-codec-vp9", version = "0.6.1", default-features = false }
-videoson-codec-rav1d = { path = "videoson-codec-rav1d", version = "0.6.1" }
-videoson-format-ivf = { path = "videoson-format-ivf", version = "0.6.1", default-features = false }
+videoson-core = { path = "videoson-core", version = "0.6.2", default-features = false }
+videoson-common = { path = "videoson-common", version = "0.6.2", default-features = false }
+videoson-codec-h264 = { path = "videoson-codec-h264", version = "0.6.2", default-features = false }
+videoson-codec-h265 = { path = "videoson-codec-h265", version = "0.6.2", default-features = false }
+videoson-codec-vp8 = { path = "videoson-codec-vp8", version = "0.6.2", default-features = false }
+videoson-codec-vp9 = { path = "videoson-codec-vp9", version = "0.6.2", default-features = false }
+videoson-codec-rav1d = { path = "videoson-codec-rav1d", version = "0.6.2" }
+videoson-format-ivf = { path = "videoson-format-ivf", version = "0.6.2", default-features = false }
 
 rust_h264 = { version = "0.4.0" }
 oxideav-h265 = { version = "0.0.10", default-features = false }
