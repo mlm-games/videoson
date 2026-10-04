@@ -41,7 +41,7 @@ pub fn require_plane_len(
 ///
 /// [`ColorInfo::signalled`] distinguishes "the stream said nothing" from "the
 /// stream said unspecified", because both look like all-unspecified data.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ColorInfo {
     pub primaries: u8,
     pub transfer: u8,
@@ -50,6 +50,18 @@ pub struct ColorInfo {
     /// Whether a `video_signal_type()` block was present at all. `false` means
     /// the caller should apply its own documented fallback.
     pub signalled: bool,
+}
+
+impl Default for ColorInfo {
+    fn default() -> Self {
+        Self {
+            primaries: CICP_UNSPECIFIED,
+            transfer: CICP_UNSPECIFIED,
+            matrix: CICP_UNSPECIFIED,
+            full_range: false,
+            signalled: false,
+        }
+    }
 }
 
 /// H.273 "unspecified" code point, used for fields a stream does not signal.
@@ -286,12 +298,7 @@ pub fn interleave_uv_nv12(
 
 /// Copy `height` rows of `width` bytes from a strided source into a
 /// tightly-packed `Vec`. Returns `InvalidData` if the source is too short.
-pub fn tight_pack_plane(
-    src: &[u8],
-    stride: usize,
-    width: usize,
-    height: usize,
-) -> Result<Vec<u8>> {
+pub fn tight_pack_plane(src: &[u8], stride: usize, width: usize, height: usize) -> Result<Vec<u8>> {
     let total = width.checked_mul(height).ok_or(VideosonError::InvalidData(
         "tight_pack_plane: dimensions overflow",
     ))?;
@@ -304,12 +311,17 @@ pub fn tight_pack_plane(
         return Ok(src[..total].to_vec());
     }
     // Check the last byte we would read
-    let last_start = (height.saturating_sub(1)).checked_mul(stride).ok_or(
-        VideosonError::InvalidData("tight_pack_plane: stride overflow"),
-    )?;
-    let last_end = last_start.checked_add(width).ok_or(VideosonError::InvalidData(
-        "tight_pack_plane: width overflow",
-    ))?;
+    let last_start =
+        (height.saturating_sub(1))
+            .checked_mul(stride)
+            .ok_or(VideosonError::InvalidData(
+                "tight_pack_plane: stride overflow",
+            ))?;
+    let last_end = last_start
+        .checked_add(width)
+        .ok_or(VideosonError::InvalidData(
+            "tight_pack_plane: width overflow",
+        ))?;
     if last_end > src.len() {
         return Err(VideosonError::InvalidData(
             "tight_pack_plane: source buffer too short",
@@ -321,4 +333,22 @@ pub fn tight_pack_plane(
         out.extend_from_slice(&src[start..start + width]);
     }
     Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{CICP_UNSPECIFIED, ColorInfo};
+
+    /// Guards the derived-`Default` trap: code 0 is a real matrix (identity /
+    /// GBR), so a defaulted `ColorInfo` that zeroed its fields would claim
+    /// every unsignalled stream is GBR rather than saying nothing.
+    #[test]
+    fn default_is_unspecified_not_identity() {
+        let d = ColorInfo::default();
+        assert_eq!(d.primaries, CICP_UNSPECIFIED);
+        assert_eq!(d.transfer, CICP_UNSPECIFIED);
+        assert_eq!(d.matrix, CICP_UNSPECIFIED);
+        assert!(!d.full_range);
+        assert!(!d.signalled);
+    }
 }

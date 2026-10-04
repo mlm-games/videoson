@@ -9,6 +9,26 @@ use videoson_core::{
     VideoOutputFormat, VideosonError, interleave_uv_nv12,
 };
 
+/// VP8 reports no colour, and its bitstream cannot be made to.
+///
+/// RFC 6386 §9.2 puts two bits in the key frame header, and neither one says
+/// anything about the colour a stream actually is:
+///
+/// * `color_space` is defined with a single legal value — `0`, "YUV color
+///   space similar to" BT.601 — and `1` is reserved forever. "Similar to" is
+///   doing the work here: encoders write `0` for HD VP8 too, so taking it
+///   literally would report BT.601 for content that is BT.709 and render it
+///   with the wrong matrix.
+/// * `clamping_type` says whether reconstruction may leave the nominal 0..255
+///   range, so the decoder should clamp. It is a statement about 8-bit
+///   overflow, not about 16..235 studio swing versus full range, so it cannot
+///   stand in for `video_full_range_flag` either.
+///
+/// So the header is genuinely empty of colour, and these frames keep
+/// `ColorInfo::default()` — `signalled: false` with every code point at
+/// `CICP_UNSPECIFIED`. Callers must apply their own documented fallback. For a
+/// container that carries colour out-of-band, that is where the real answer
+/// is: Matroska's `Colour` element, or ISO-BMFF's `colr` box.
 pub struct Vp8Decoder {
     params: VideoCodecParams,
     opts: VideoDecoderOptions,

@@ -5,7 +5,10 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 use oxideav_core::ExecutionContext;
-use oxideav_vp9::{Vp9DecodedFrame, Vp9SequenceDecoder, split_superframe};
+use oxideav_vp9::{
+    ColorConfig, ColorSpace, FrameType, Vp9DecodedFrame, Vp9SequenceDecoder,
+    parse_uncompressed_header, split_superframe,
+};
 
 use videoson_core::{
     CodecType, ColorInfo, Packet, PixelFormat, PlaneData, Result, VideoCodecParams, VideoDecoder,
@@ -19,6 +22,41 @@ pub struct Vp9Decoder {
     decoder: Vp9SequenceDecoder,
     queued: VecDeque<VideoFrame>,
     exec: ExecutionContext,
+    /// Colour carried from the last frame whose header actually signalled it.
+    ///
+    /// §6.2 only lets an intra frame establish `color_config( )`; inter frames
+    /// inherit it. An inter header cannot be parsed standalone — it needs the
+    /// reference state this decoder keeps internally — so the value is
+    /// latched here instead of re-read per frame.
+    color: ColorInfo,
+}
+
+/// Map a VP9 §7.2.2 `color_config( )` onto H.273 code points.
+///
+/// `None` when the config carries no signal. `CS_UNKNOWN` states outright that
+/// colour comes out-of-band and `CS_RESERVED` is undefined; inventing a
+/// concrete code for either would be worse than reporting nothing.
+fn cicp_from_color_config(cc: ColorConfig) -> Option<ColorInfo> {
+    let (primaries, transfer, matrix) = match cc.color_space {
+        ColorSpace::Unknown | ColorSpace::Reserved => return None,
+        // VP9 defines both of these as BT.601-family. H.273 code 6 (SMPTE
+        // 170M) carries the coefficients that match.
+        ColorSpace::Bt601 | ColorSpace::Smpte170 => (6, 6, 6),
+        ColorSpace::Bt709 => (1, 1, 1),
+        ColorSpace::Smpte240 => (7, 7, 7),
+        ColorSpace::Bt2020 => (9, 9, 9),
+        // CS_RGB is 4:4:4, so the luma coefficients are the identity matrix —
+        // H.273 code 0. CICP has no sRGB code point; BT.709 primaries and
+        // transfer are the conventional stand-in.
+        ColorSpace::Rgb => (1, 1, 0),
+    };
+    Some(ColorInfo {
+        primaries,
+        transfer,
+        matrix,
+        full_range: cc.color_range_full,
+        signalled: true,
+    })
 }
 
 fn pack_u16_to_u8(src: &[u16]) -> Vec<u8> {
@@ -29,6 +67,7 @@ fn convert_frame(
     f: Vp9DecodedFrame,
     pts: Option<i64>,
     opts: &VideoDecoderOptions,
+    color: ColorInfo,
 ) -> Result<VideoFrame> {
     let w = f.width as usize;
     let h = f.height as usize;
@@ -66,7 +105,7 @@ fn convert_frame(
                     stride: w,
                     data: PlaneData::U8(y),
                 }],
-                color_info: ColorInfo::default(),
+                color_info: color,
                 poc: None,
             });
         } else {
@@ -81,7 +120,7 @@ fn convert_frame(
                     stride: w,
                     data: PlaneData::U16(f.y),
                 }],
-                color_info: ColorInfo::default(),
+                color_info: color,
                 poc: None,
             });
         }
@@ -94,11 +133,14 @@ fn convert_frame(
 
         if opts.output_format == VideoOutputFormat::Nv12 {
             let uv = interleave_uv_nv12(&u_data, cw, &v_data, cw, cw, ch)?;
-            Ok(VideoFrame::new_nv12_u8(f.width, f.height, w, cw * 2, y, uv).with_pts(pts))
+            Ok(VideoFrame::new_nv12_u8(f.width, f.height, w, cw * 2, y, uv)
+                .with_pts(pts)
+                .with_color_info(color))
         } else {
             Ok(
                 VideoFrame::new_yuv420_u8(f.width, f.height, w, cw, cw, y, u_data, v_data)
-                    .with_pts(pts),
+                    .with_pts(pts)
+                    .with_color_info(color),
             )
         }
     } else {
@@ -123,7 +165,7 @@ fn convert_frame(
                     data: PlaneData::U16(f.v),
                 },
             ],
-            color_info: ColorInfo::default(),
+            color_info: color,
             poc: None,
         })
     }
@@ -150,6 +192,31 @@ impl Vp9Decoder {
         let exec = ExecutionContext::with_threads(threads);
         self.set_execution_context(&exec);
     }
+
+    /// Latch the colour an intra frame's uncompressed header carries.
+    ///
+    /// A parse failure is not an error: inter headers need reference state and
+    /// always fail here, and colour is metadata that must never fail a decode.
+    /// The `show_existing_frame` sentinel early-returns a header full of
+    /// placeholder fields, and the frame it re-displays inherits whatever was
+    /// latched when that frame was originally decoded, so both are skipped.
+    fn latch_color(&mut self, slice: &[u8]) {
+        let Ok(hdr) = parse_uncompressed_header(slice) else {
+            return;
+        };
+        if hdr.show_existing_frame {
+            return;
+        }
+        // A key frame always reads colour from the bitstream. A non-key intra
+        // frame does only when Profile > 0; at Profile 0 §6.2 installs BT.601
+        // as a default rather than reading it, which is not a signal.
+        if !(hdr.frame_type == FrameType::KeyFrame || hdr.profile > 0) {
+            return;
+        }
+        if let Some(cicp) = cicp_from_color_config(hdr.color_config) {
+            self.color = cicp;
+        }
+    }
 }
 
 impl VideoDecoder for Vp9Decoder {
@@ -174,6 +241,7 @@ impl VideoDecoder for Vp9Decoder {
             decoder,
             queued: VecDeque::new(),
             exec,
+            color: ColorInfo::default(),
         })
     }
 
@@ -184,12 +252,13 @@ impl VideoDecoder for Vp9Decoder {
     fn send_packet(&mut self, packet: &Packet) -> Result<()> {
         let slices = split_superframe(&packet.data);
         for slice in slices {
+            self.latch_color(slice);
             let maybe_frame = self
                 .decoder
                 .push_frame(slice)
                 .map_err(|e| VideosonError::Message(alloc::format!("VP9: {e}").into()))?;
             if let Some(frame) = maybe_frame {
-                let vf = convert_frame(frame, packet.pts, &self.opts)?;
+                let vf = convert_frame(frame, packet.pts, &self.opts, self.color)?;
                 self.queued.push_back(vf);
             }
         }
@@ -208,6 +277,7 @@ impl VideoDecoder for Vp9Decoder {
         self.decoder = Vp9SequenceDecoder::new();
         self.decoder.set_execution_context(&self.exec);
         self.queued.clear();
+        self.color = ColorInfo::default();
         Ok(())
     }
 
