@@ -29,13 +29,31 @@ pub fn require_plane_len(
     }
 }
 
+/// Colour signalling from a stream's `video_signal_type()` block, as raw
+/// ITU-T H.273 code points.
+///
+/// H.264 §E.3.1 and H.265 §E.3.1 treat each field as *individually* optional:
+/// `video_full_range_flag` is signalled before and independently of
+/// `colour_description_present_flag`, so a stream may report full range with
+/// no primaries, transfer or matrix. Fields the stream leaves unspecified hold
+/// [`CICP_UNSPECIFIED`] (2), never 0 — code 0 is a real value (identity
+/// matrix) and must not double as a "not signalled" sentinel.
+///
+/// [`ColorInfo::signalled`] distinguishes "the stream said nothing" from "the
+/// stream said unspecified", because both look like all-unspecified data.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct ColorInfo {
     pub primaries: u8,
     pub transfer: u8,
     pub matrix: u8,
     pub full_range: bool,
+    /// Whether a `video_signal_type()` block was present at all. `false` means
+    /// the caller should apply its own documented fallback.
+    pub signalled: bool,
 }
+
+/// H.273 "unspecified" code point, used for fields a stream does not signal.
+pub const CICP_UNSPECIFIED: u8 = 2;
 
 #[derive(Debug, Clone)]
 pub enum PlaneData {

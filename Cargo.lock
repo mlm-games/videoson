@@ -326,6 +326,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "oxideav-h264"
+version = "0.1.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b6bbe6bb48d3460e4c5348699de767e9aa43711e75c585e1b61cb3bc2fe6c207"
+dependencies = [
+ "oxideav-core",
+ "thiserror",
+]
+
+[[package]]
 name = "oxideav-h265"
 version = "0.0.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -754,8 +764,9 @@ checksum = "ba73ea9cf16a25df0c8caa16c51acb937d5712a8429db78a3ee29d5dcacd3a65"
 
 [[package]]
 name = "videoson"
-version = "0.5.4"
+version = "0.6.0"
 dependencies = [
+ "oxideav-h265",
  "videoson-codec-h264",
  "videoson-codec-h265",
  "videoson-codec-rav1d",
@@ -768,15 +779,16 @@ dependencies = [
 
 [[package]]
 name = "videoson-codec-h264"
-version = "0.5.4"
+version = "0.6.0"
 dependencies = [
+ "oxideav-h264",
  "rust_h264",
  "videoson-core",
 ]
 
 [[package]]
 name = "videoson-codec-h265"
-version = "0.5.4"
+version = "0.6.0"
 dependencies = [
  "oxideav-core",
  "oxideav-h265",
@@ -786,7 +798,7 @@ dependencies = [
 
 [[package]]
 name = "videoson-codec-rav1d"
-version = "0.5.4"
+version = "0.6.0"
 dependencies = [
  "rav1d-safe",
  "videoson-core",
@@ -794,7 +806,7 @@ dependencies = [
 
 [[package]]
 name = "videoson-codec-vp8"
-version = "0.5.4"
+version = "0.6.0"
 dependencies = [
  "oxideav-vp8",
  "videoson-core",
@@ -802,7 +814,7 @@ dependencies = [
 
 [[package]]
 name = "videoson-codec-vp9"
-version = "0.5.4"
+version = "0.6.0"
 dependencies = [
  "oxideav-core",
  "oxideav-vp9",
@@ -811,15 +823,15 @@ dependencies = [
 
 [[package]]
 name = "videoson-common"
-version = "0.5.4"
+version = "0.6.0"
 
 [[package]]
 name = "videoson-core"
-version = "0.5.4"
+version = "0.6.0"
 
 [[package]]
 name = "videoson-format-ivf"
-version = "0.5.4"
+version = "0.6.0"
 dependencies = [
  "oxideav-bitstream",
  "videoson-common",

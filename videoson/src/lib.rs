@@ -2,12 +2,17 @@
 
 extern crate alloc;
 
+#[cfg(any(feature = "h264", feature = "h265"))]
+extern crate std;
+
 pub use videoson_core::{
-    CodecRegistry, CodecType, ColorInfo, NalFormat, Packet, PixelFormat, PlaneData,
-    RegisterableVideoDecoder, Result, SupportedVideoCodec, VideoCodecParams, VideoDecoder,
-    VideoDecoderOptions, VideoFrame, VideoFramePlanes, VideoOutputFormat, VideoPlane,
+    CICP_UNSPECIFIED, CodecRegistry, CodecType, ColorInfo, NalFormat, Packet, PixelFormat,
+    PlaneData, RegisterableVideoDecoder, Result, SupportedVideoCodec, VideoCodecParams,
+    VideoDecoder, VideoDecoderOptions, VideoFrame, VideoFramePlanes, VideoOutputFormat, VideoPlane,
     VideosonError, interleave_uv_nv12, tight_pack_plane,
 };
+
+pub mod color;
 
 #[cfg(feature = "h264")]
 pub use videoson_codec_h264 as codec_h264;

@@ -7,7 +7,7 @@ extern crate std;
 
 mod oxideav_h265_decoder;
 
-pub use oxideav_h265_decoder::OxideH265Decoder;
+pub use oxideav_h265_decoder::{OxideH265Decoder, cicp_from_nal_units};
 
 pub type H265Decoder = OxideH265Decoder;
 

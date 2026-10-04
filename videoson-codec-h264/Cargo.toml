@@ -15,3 +15,4 @@ std = ["videoson-core/std"]
 videoson-core.workspace = true
 
 rust_h264.workspace = true
+oxideav-h264 = { version = "0.1", default-features = false }

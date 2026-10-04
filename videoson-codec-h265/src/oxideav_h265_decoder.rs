@@ -9,18 +9,48 @@ use alloc::vec::Vec;
 use core::cmp::Reverse;
 
 use oxideav_h265::hvcc::{extradata_is_hvcc, parse_hvcc, split_length_prefixed};
+use oxideav_h265::nal::NalUnit;
 use oxideav_h265::picture::{Picture, Plane};
 use oxideav_h265::sequence::{DecodedFrame, SequenceDecoder};
+use oxideav_h265::sps::SeqParameterSet;
 
 use videoson_core::{
-    CodecType, ColorInfo, Packet, PixelFormat, PlaneData, Result, VideoCodecParams, VideoDecoder,
-    VideoDecoderOptions, VideoFrame, VideoFramePlanes, VideoOutputFormat, VideoPlane,
-    VideosonError, interleave_uv_nv12, require_plane_len,
+    CICP_UNSPECIFIED, CodecType, ColorInfo, Packet, PixelFormat, PlaneData, Result,
+    VideoCodecParams, VideoDecoder, VideoDecoderOptions, VideoFrame, VideoFramePlanes,
+    VideoOutputFormat, VideoPlane, VideosonError, interleave_uv_nv12, require_plane_len,
 };
 
 /// Default output-reorder depth before `sps_max_num_reorder_pics` is
 /// known. Mirrors oxideav's registry decoder.
 const DEFAULT_REORDER: usize = 8;
+
+/// `sps_seq_parameter_set_id` NAL type, Table 7-1.
+const NAL_UNIT_TYPE_SPS: u8 = 33;
+
+/// Pull the CICP triple out of the first SPS in `units`.
+///
+/// §E.3.1: an absent `vui_parameters`, an absent
+/// `video_signal_type`, or `colour_description_present_flag == 0`
+/// all leave the fields unspecified, reported here as `None` so
+/// callers can apply their own fallback instead of reading zeros as
+/// a real signal.
+pub fn cicp_from_nal_units(units: &[NalUnit]) -> Option<ColorInfo> {
+    let sps = units
+        .iter()
+        .find(|u| u.header.nal_unit_type == NAL_UNIT_TYPE_SPS)
+        .and_then(|u| SeqParameterSet::parse(&u.rbsp).ok())?;
+    let signal = sps.vui_parameters?.video_signal_type?;
+    let d = signal.colour_description;
+    Some(ColorInfo {
+        primaries: d.as_ref().map_or(CICP_UNSPECIFIED, |d| d.colour_primaries),
+        transfer: d
+            .as_ref()
+            .map_or(CICP_UNSPECIFIED, |d| d.transfer_characteristics),
+        matrix: d.as_ref().map_or(CICP_UNSPECIFIED, |d| d.matrix_coeffs),
+        full_range: signal.video_full_range_flag,
+        signalled: true,
+    })
+}
 
 /// Strip an 8-byte `hvcC` box header (`size + 'hvcC'`) when present,
 /// returning the raw HEVCDecoderConfigurationRecord.
@@ -59,6 +89,7 @@ fn convert_picture(
     pic: &Picture,
     pts: Option<i64>,
     opts: &VideoDecoderOptions,
+    color: ColorInfo,
 ) -> Result<VideoFrame> {
     let (w, h) = pic.plane_dims(Plane::Luma);
     let bit_depth = pic.bit_depth(Plane::Luma);
@@ -80,7 +111,7 @@ fn convert_picture(
                     stride: w,
                     data: PlaneData::U8(y),
                 }],
-                color_info: ColorInfo::default(),
+                color_info: color,
                 poc: None,
             });
         }
@@ -97,7 +128,7 @@ fn convert_picture(
                 stride: w,
                 data: PlaneData::U16(y),
             }],
-            color_info: ColorInfo::default(),
+            color_info: color,
             poc: None,
         });
     }
@@ -117,11 +148,16 @@ fn convert_picture(
         require_plane_len(y.len(), w, w, h, "H.265: Y plane too short")?;
         if matches!(opts.output_format, VideoOutputFormat::Nv12) {
             let uv = interleave_uv_nv12(&u, cw, &v, cw, cw, ch)?;
-            Ok(VideoFrame::new_nv12_u8(w as u32, h as u32, w, cw * 2, y, uv).with_pts(pts))
+            Ok(
+                VideoFrame::new_nv12_u8(w as u32, h as u32, w, cw * 2, y, uv)
+                    .with_pts(pts)
+                    .with_color_info(color),
+            )
         } else {
             Ok(
                 VideoFrame::new_yuv420_u8(w as u32, h as u32, w, cw, cw, y, u, v)
-                    .with_pts(pts),
+                    .with_pts(pts)
+                    .with_color_info(color),
             )
         }
     } else {
@@ -150,7 +186,7 @@ fn convert_picture(
                     data: PlaneData::U16(v),
                 },
             ],
-            color_info: ColorInfo::default(),
+            color_info: color,
             poc: None,
         })
     }
@@ -161,6 +197,7 @@ pub struct OxideH265Decoder {
     opts: VideoDecoderOptions,
     seq: SequenceDecoder,
     nal_length_size: Option<usize>,
+    color: ColorInfo,
     reorder: Vec<DecodedFrame>,
     ready: VecDeque<VideoFrame>,
     pts_queue: BinaryHeap<Reverse<i64>>,
@@ -168,20 +205,26 @@ pub struct OxideH265Decoder {
 }
 
 impl OxideH265Decoder {
-    fn prime_extradata(seq: &mut SequenceDecoder, extradata: &[u8]) -> Result<Option<usize>> {
+    fn prime_extradata(
+        seq: &mut SequenceDecoder,
+        extradata: &[u8],
+    ) -> Result<(Option<usize>, Option<ColorInfo>)> {
         let payload = strip_hvcc_box(extradata);
         if payload.is_empty() {
-            return Ok(None);
+            return Ok((None, None));
         }
         if extradata_is_hvcc(payload) {
             let rec = parse_hvcc(payload).map_err(map_err)?;
+            let color = cicp_from_nal_units(&rec.nal_units);
             for unit in rec.nal_units {
                 seq.push_nal_unit(unit).map_err(map_err)?;
             }
-            Ok(Some(rec.length_size))
+            Ok((Some(rec.length_size), color))
         } else {
             seq.push_annexb(payload).map_err(map_err)?;
-            Ok(None)
+            let color = oxideav_h265::nal::collect_nal_units(payload)
+                .map_or(None, |units| cicp_from_nal_units(&units));
+            Ok((None, color))
         }
     }
 
@@ -200,17 +243,19 @@ impl OxideH265Decoder {
             }
             let pts = self.pts_queue.pop().map(|r| r.0);
             let poc = f.poc;
-            let mut vf = convert_picture(&f.picture, pts, &self.opts)?;
+            let mut vf = convert_picture(&f.picture, pts, &self.opts, self.color)?;
             vf.poc = Some(poc);
             self.ready.push_back(vf);
         }
         Ok(())
     }
 
-    fn build(params: &VideoCodecParams) -> Result<(SequenceDecoder, Option<usize>)> {
+    fn build(
+        params: &VideoCodecParams,
+    ) -> Result<(SequenceDecoder, Option<usize>, Option<ColorInfo>)> {
         let mut seq = SequenceDecoder::new();
-        let nal_length_size = Self::prime_extradata(&mut seq, &params.extradata)?;
-        Ok((seq, nal_length_size))
+        let (nal_length_size, color) = Self::prime_extradata(&mut seq, &params.extradata)?;
+        Ok((seq, nal_length_size, color))
     }
 }
 
@@ -227,12 +272,13 @@ impl VideoDecoder for OxideH265Decoder {
                 "P010 output is not supported for H.265",
             ));
         }
-        let (seq, nal_length_size) = Self::build(params)?;
+        let (seq, nal_length_size, color) = Self::build(params)?;
         Ok(Self {
             params: params.clone(),
             opts: *opts,
             seq,
             nal_length_size,
+            color: color.unwrap_or_default(),
             reorder: Vec::new(),
             ready: VecDeque::new(),
             pts_queue: BinaryHeap::new(),
@@ -252,12 +298,21 @@ impl VideoDecoder for OxideH265Decoder {
             self.pts_queue.push(Reverse(pts));
         }
         if let Some(length_size) = self.nal_length_size {
-            let units =
-                split_length_prefixed(&packet.data, length_size).map_err(map_err)?;
+            let units = split_length_prefixed(&packet.data, length_size).map_err(map_err)?;
+            if let Some(color) = cicp_from_nal_units(&units) {
+                self.color = color;
+            }
             for unit in units {
                 self.seq.push_nal_unit(unit).map_err(map_err)?;
             }
         } else {
+            if let Some(color) = oxideav_h265::nal::collect_nal_units(&packet.data)
+                .ok()
+                .as_deref()
+                .and_then(cicp_from_nal_units)
+            {
+                self.color = color;
+            }
             self.seq.push_annexb(&packet.data).map_err(map_err)?;
         }
         self.drain(false)
@@ -274,9 +329,10 @@ impl VideoDecoder for OxideH265Decoder {
     }
 
     fn reset(&mut self) -> Result<()> {
-        let (seq, nal_length_size) = Self::build(&self.params)?;
+        let (seq, nal_length_size, color) = Self::build(&self.params)?;
         self.seq = seq;
         self.nal_length_size = nal_length_size;
+        self.color = color.unwrap_or_default();
         self.reorder.clear();
         self.ready.clear();
         self.pts_queue.clear();

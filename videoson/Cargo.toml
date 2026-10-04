@@ -21,7 +21,7 @@ std = [
   "videoson-codec-rav1d?/std",
 ]
 h264 = ["dep:videoson-codec-h264"]
-h265 = ["dep:videoson-codec-h265"]
+h265 = ["dep:videoson-codec-h265", "dep:oxideav-h265"]
 vp8 = ["dep:videoson-codec-vp8"]
 vp9 = ["dep:videoson-codec-vp9"]
 rav1d = ["dep:videoson-codec-rav1d", "std"]
@@ -33,6 +33,7 @@ videoson-common.workspace = true
 videoson-format-ivf = { workspace = true, optional = true }
 videoson-codec-h264 = { workspace = true, optional = true }
 videoson-codec-h265 = { workspace = true, optional = true }
+oxideav-h265 = { workspace = true, optional = true }
 videoson-codec-vp8 = { workspace = true, optional = true }
 videoson-codec-vp9 = { workspace = true, optional = true }
 videoson-codec-rav1d = { workspace = true, optional = true }

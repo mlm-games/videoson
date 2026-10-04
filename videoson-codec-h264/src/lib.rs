@@ -4,7 +4,7 @@ extern crate alloc;
 
 mod rust_h264_decoder;
 
-pub use rust_h264_decoder::RustH264Decoder;
+pub use rust_h264_decoder::{RustH264Decoder, cicp_from_sps_rbsp};
 
 pub type H264Decoder = RustH264Decoder;
 

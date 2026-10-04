@@ -232,5 +232,9 @@ fn rav1d_color_info(frame: &Frame) -> VideosonColorInfo {
         transfer: ci.transfer_characteristics as u8,
         matrix: ci.matrix_coefficients as u8,
         full_range: matches!(ci.color_range, Rav1dColorRange::Full),
+        // rav1d reports AV1 `color_config()`, which is always present in a
+        // conformant sequence header, so these are genuine codes rather than
+        // §E.3.1-unspecified placeholders.
+        signalled: true,
     }
 }

@@ -4,12 +4,14 @@ use alloc::collections::VecDeque;
 use alloc::string::ToString;
 use alloc::vec::Vec;
 
+use oxideav_h264::sps::Sps;
 use rust_h264::decoder::Decoder as Inner;
 use rust_h264::nal::{NalUnit, NalUnitType, parse_annex_b, parse_avcc, parse_avcc_config};
 
 use videoson_core::{
-    CodecType, NalFormat, Packet, Result, VideoCodecParams, VideoDecoder, VideoDecoderOptions,
-    VideoFrame, VideoOutputFormat, VideosonError, interleave_uv_nv12, require_plane_len,
+    CICP_UNSPECIFIED, CodecType, ColorInfo, NalFormat, Packet, Result, VideoCodecParams,
+    VideoDecoder, VideoDecoderOptions, VideoFrame, VideoOutputFormat, VideosonError,
+    interleave_uv_nv12, require_plane_len,
 };
 
 struct OrderedFrame {
@@ -25,11 +27,43 @@ fn is_vcl_nal(nal: &NalUnit<'_>) -> bool {
     )
 }
 
+/// Read the CICP triple out of an H.264 SPS RBSP — the bytes *after* the NAL
+/// header, with emulation prevention already stripped.
+///
+/// §E.3.1: an absent `vui_parameters`, an absent `video_signal_type`,
+/// or `colour_description_present_flag == 0` all leave the fields
+/// unspecified. `None` reports that, so callers can apply their own
+/// fallback rather than decoding zeros as a real signal.
+pub fn cicp_from_sps_rbsp(rbsp: &[u8]) -> Option<ColorInfo> {
+    let signal = Sps::parse(rbsp).ok()?.vui?.video_signal_type?;
+    let d = signal.colour_description;
+    Some(ColorInfo {
+        primaries: d.as_ref().map_or(CICP_UNSPECIFIED, |d| d.colour_primaries),
+        transfer: d
+            .as_ref()
+            .map_or(CICP_UNSPECIFIED, |d| d.transfer_characteristics),
+        matrix: d
+            .as_ref()
+            .map_or(CICP_UNSPECIFIED, |d| d.matrix_coefficients),
+        full_range: signal.video_full_range_flag,
+        signalled: true,
+    })
+}
+
+/// As [`cicp_from_sps_rbsp`], for a NAL known to be an SPS.
+fn cicp_from_sps_nal(nal: &NalUnit<'_>) -> Option<ColorInfo> {
+    if !matches!(nal.nal_unit_type, NalUnitType::Sps) {
+        return None;
+    }
+    cicp_from_sps_rbsp(&nal.rbsp)
+}
+
 pub struct RustH264Decoder {
     params: VideoCodecParams,
     opts: VideoDecoderOptions,
     nal_format: NalFormat,
     avcc_length_size: Option<usize>,
+    color: ColorInfo,
     dec: Inner,
     queued: VecDeque<VideoFrame>,
     pending: Vec<OrderedFrame>,
@@ -150,6 +184,8 @@ impl RustH264Decoder {
             }
         };
 
+        let frame = frame.with_color_info(self.color);
+
         let gop = self.idr_count;
         self.pending.push(OrderedFrame { gop, poc, frame });
         Ok(())
@@ -216,6 +252,10 @@ impl RustH264Decoder {
     fn feed_nal(&mut self, nal: &NalUnit<'_>, pts: Option<i64>) -> Result<()> {
         let is_idr = matches!(nal.nal_unit_type, NalUnitType::SliceIdr);
 
+        if let Some(color) = cicp_from_sps_nal(nal) {
+            self.color = color;
+        }
+
         match self.dec.decode_nal(nal) {
             Ok(Some(frame)) => {
                 // decode_nal returns the PREVIOUS completed picture.
@@ -268,6 +308,10 @@ impl RustH264Decoder {
         let cfg = parse_avcc_config(payload).map_err(Self::map_err)?;
         self.avcc_length_size = Some(cfg.length_size);
 
+        if let Some(color) = cfg.sps_nals.first().and_then(cicp_from_sps_nal) {
+            self.color = color;
+        }
+
         for nal in cfg.sps_nals.iter().chain(cfg.pps_nals.iter()) {
             let _ = self.dec.decode_nal(nal).map_err(Self::map_err)?;
         }
@@ -305,6 +349,7 @@ impl VideoDecoder for RustH264Decoder {
             opts: *opts,
             nal_format,
             avcc_length_size: None,
+            color: ColorInfo::default(),
             dec: Inner::new(),
             queued: VecDeque::new(),
             pending: Vec::new(),
@@ -352,6 +397,7 @@ impl VideoDecoder for RustH264Decoder {
         self.in_idr_picture = false;
         self.pending_pts = None;
         self.avcc_length_size = None;
+        self.color = ColorInfo::default();
 
         if matches!(self.nal_format, NalFormat::Avcc { .. }) {
             self.prime_with_avcc_extradata()?;
