@@ -24,7 +24,7 @@ use alloc::boxed::Box;
 use alloc::collections::VecDeque;
 use alloc::format;
 
-use rav1d_safe::{ColorRange as Rav1dColorRange, Decoder, Frame, Planes};
+use rav1d_safe::{ColorRange as Rav1dColorRange, Decoder, Frame, Planes, Settings};
 use videoson_core::{
     CodecType, ColorInfo as VideosonColorInfo, Packet, RegisterableVideoDecoder, Result,
     SupportedVideoCodec, VideoCodecParams, VideoDecoder, VideoDecoderOptions, VideoFrame,
@@ -35,8 +35,15 @@ pub struct Rav1dSafeDecoder {
     params: VideoCodecParams,
     opts: VideoDecoderOptions,
     decoder: Decoder,
+    settings: Settings,
     queued: VecDeque<VideoFrame>,
     eos_sent: bool,
+}
+
+fn settings_from_opts(opts: &VideoDecoderOptions) -> Settings {
+    let mut settings = Settings::default();
+    settings.threads = opts.threads.unwrap_or(1).clamp(1, 256) as u32;
+    settings
 }
 
 impl VideoDecoder for Rav1dSafeDecoder {
@@ -51,12 +58,14 @@ impl VideoDecoder for Rav1dSafeDecoder {
             ));
         }
 
-        let decoder =
-            Decoder::new().map_err(|e| VideosonError::Message(format!("rav1d init: {e}")))?;
+        let settings = settings_from_opts(opts);
+        let decoder = Decoder::with_settings(settings.clone())
+            .map_err(|e| VideosonError::Message(format!("rav1d init: {e}")))?;
         Ok(Self {
             params: params.clone(),
             opts: *opts,
             decoder,
+            settings,
             queued: VecDeque::new(),
             eos_sent: false,
         })
@@ -99,7 +108,7 @@ impl VideoDecoder for Rav1dSafeDecoder {
     }
 
     fn reset(&mut self) -> Result<()> {
-        self.decoder = Decoder::new()
+        self.decoder = Decoder::with_settings(self.settings.clone())
             .map_err(|e| VideosonError::Message(alloc::format!("rav1d reset: {e}").into()))?;
         self.queued.clear();
         self.eos_sent = false;

@@ -16,4 +16,5 @@ videoson-codec-h264 = { workspace = true, features = ["std"] }
 videoson-codec-h265 = { workspace = true, features = ["std"] }
 videoson-codec-vp8 = { workspace = true, features = ["std"] }
 videoson-codec-vp9 = { workspace = true, features = ["std"] }
+videoson-codec-rav1d = { workspace = true, features = ["std"] }
 videoson-format-ivf.workspace = true

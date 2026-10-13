@@ -660,6 +660,7 @@ dependencies = [
  "less-avc",
  "videoson-codec-h264",
  "videoson-codec-h265",
+ "videoson-codec-rav1d",
  "videoson-codec-vp8",
  "videoson-codec-vp9",
  "videoson-core",
