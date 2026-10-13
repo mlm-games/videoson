@@ -36,7 +36,7 @@ oxideav-vp8 = { version = "0.2.7", default-features = false }
 oxideav-vp9 = { version = "0.0.13", default-features = false }
 oxideav-core = { version = "0.1.35", default-features = false }
 oxideav-bitstream = { version = "0.0.2", default-features = false }
-rav1d-safe = { version = "0.6" }
+rav1d-safe = { version = "0.6", features = ["unchecked"] }
 
 anyhow = { version = "1" }
 less-avc = { version = "0.1.5" }

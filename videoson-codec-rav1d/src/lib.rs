@@ -37,6 +37,7 @@ pub struct Rav1dSafeDecoder {
     decoder: Decoder,
     settings: Settings,
     queued: VecDeque<VideoFrame>,
+    pending_pts: VecDeque<Option<i64>>,
     eos_sent: bool,
 }
 
@@ -67,6 +68,7 @@ impl VideoDecoder for Rav1dSafeDecoder {
             decoder,
             settings,
             queued: VecDeque::new(),
+            pending_pts: VecDeque::new(),
             eos_sent: false,
         })
     }
@@ -76,19 +78,23 @@ impl VideoDecoder for Rav1dSafeDecoder {
     }
 
     fn send_packet(&mut self, packet: &Packet) -> Result<()> {
+        self.pending_pts.push_back(packet.pts);
         match self.decoder.decode(&packet.data) {
             Ok(Some(frame)) => {
                 let vf = self.frame_to_video_frame(&frame, packet.pts)?;
                 self.queued.push_back(vf);
-                Ok(())
             }
-            Ok(None) => Ok(()),
-            Err(e) if matches!(e.error(), rav1d_safe::Error::NeedMoreData) => Ok(()),
-            Err(e) => Err(VideosonError::Message(format!("rav1d: {e}"))),
+            Ok(None) => {}
+            Err(e) if matches!(e.error(), rav1d_safe::Error::NeedMoreData) => {}
+            Err(e) => return Err(VideosonError::Message(format!("rav1d: {e}"))),
         }
+        self.drain_pending()
     }
 
     fn receive_frame(&mut self) -> Result<Option<VideoFrame>> {
+        if self.queued.is_empty() {
+            self.drain_pending()?;
+        }
         Ok(self.queued.pop_front())
     }
 
@@ -100,7 +106,8 @@ impl VideoDecoder for Rav1dSafeDecoder {
                 .flush()
                 .map_err(|e| VideosonError::Message(format!("rav1d flush: {e}")))?;
             for frame in frames {
-                let vf = self.frame_to_video_frame(&frame, None)?;
+                let pts = self.pending_pts.pop_front().flatten();
+                let vf = self.frame_to_video_frame(&frame, pts)?;
                 self.queued.push_back(vf);
             }
         }
@@ -111,6 +118,7 @@ impl VideoDecoder for Rav1dSafeDecoder {
         self.decoder = Decoder::with_settings(self.settings.clone())
             .map_err(|e| VideosonError::Message(alloc::format!("rav1d reset: {e}").into()))?;
         self.queued.clear();
+        self.pending_pts.clear();
         self.eos_sent = false;
         Ok(())
     }
@@ -143,6 +151,19 @@ impl RegisterableVideoDecoder for Rav1dSafeDecoder {
 }
 
 impl Rav1dSafeDecoder {
+    fn drain_pending(&mut self) -> Result<()> {
+        while let Some(frame) = self
+            .decoder
+            .get_frame()
+            .map_err(|e| VideosonError::Message(format!("rav1d get_frame: {e}")))?
+        {
+            let pts = self.pending_pts.pop_front().flatten();
+            let vf = self.frame_to_video_frame(&frame, pts)?;
+            self.queued.push_back(vf);
+        }
+        Ok(())
+    }
+
     fn wants_nv12(&self) -> bool {
         matches!(self.opts.output_format, VideoOutputFormat::Nv12)
     }
