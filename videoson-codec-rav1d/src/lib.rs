@@ -36,9 +36,27 @@ pub struct Rav1dSafeDecoder {
     opts: VideoDecoderOptions,
     decoder: Decoder,
     settings: Settings,
+    seq_header: Option<Vec<u8>>,
     queued: VecDeque<VideoFrame>,
     pending_pts: VecDeque<Option<i64>>,
     eos_sent: bool,
+}
+
+/// Extract the config OBUs from an av1C configuration record.
+///
+/// MP4 carries the sequence header in `av1C` rather than in the samples, and a
+/// decoder rebuilt for a seek is handed only the config record, so the OBUs must
+/// be replayed into it or it never learns the stream parameters.
+fn seq_header_from_avcc(extradata: &[u8]) -> Option<Vec<u8>> {
+    if extradata.len() < 5 || extradata[0] != 0x81 {
+        return None;
+    }
+    let mut pos = 4usize;
+    if extradata[3] & 0x01 != 0 {
+        pos += 1;
+    }
+    let obus = extradata.get(pos..)?;
+    (!obus.is_empty()).then(|| obus.to_vec())
 }
 
 fn settings_from_opts(opts: &VideoDecoderOptions) -> Settings {
@@ -65,6 +83,7 @@ impl VideoDecoder for Rav1dSafeDecoder {
         Ok(Self {
             params: params.clone(),
             opts: *opts,
+            seq_header: seq_header_from_avcc(&params.extradata),
             decoder,
             settings,
             queued: VecDeque::new(),
@@ -117,6 +136,9 @@ impl VideoDecoder for Rav1dSafeDecoder {
     fn reset(&mut self) -> Result<()> {
         self.decoder = Decoder::with_settings(self.settings.clone())
             .map_err(|e| VideosonError::Message(alloc::format!("rav1d reset: {e}").into()))?;
+        if let Some(header) = self.seq_header.clone() {
+            let _ = self.decoder.decode(&header);
+        }
         self.queued.clear();
         self.pending_pts.clear();
         self.eos_sent = false;
