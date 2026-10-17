@@ -20,6 +20,8 @@ pub enum CodecType {
 pub enum PixelFormat {
     Gray,
     Yuv420,
+    Yuv422,
+    Yuv444,
     Nv12,
     P010,
 }
@@ -29,6 +31,8 @@ pub enum PixelFormat {
 pub enum VideoFramePlanes {
     Mono,
     Yuv420,
+    Yuv422,
+    Yuv444,
     Nv12,
     P010,
 }
@@ -138,11 +142,12 @@ pub trait VideoDecoder {
     /// This reflects the *requested* format, which the decoder will honour
     /// when possible.  The actual per-frame format may differ:
     ///
-    /// | Stream property       | Actual format                |
-    /// |-----------------------|------------------------------|
-    /// | 8-bit colour          | matches request              |
-    /// | 10/12-bit colour      | `Yuv420` (U16 planes)        |
-    /// | Monochrome            | `Gray` (single Y plane)      |
+    /// | Stream property       | Actual format                     |
+    /// |-----------------------|-----------------------------------|
+    /// | 8-bit 4:2:0           | matches request (`Yuv420`/`Nv12`) |
+    /// | 4:2:2 / 4:4:4         | `Yuv422` / `Yuv444` planar        |
+    /// | 10/12-bit colour      | planar (U16 planes), `bit_depth`  |
+    /// | Monochrome            | `Gray` (single Y plane)           |
     ///
     /// Always inspect the `VideoFrame` fields (`pixfmt`, `bit_depth`,
     /// `plane_data`) to determine the per-frame pixel format.

@@ -207,6 +207,152 @@ impl VideoFrame {
         }
     }
 
+    pub fn new_yuv422_u8(
+        width: u32,
+        height: u32,
+        y_stride: usize,
+        u_stride: usize,
+        v_stride: usize,
+        y: Vec<u8>,
+        u: Vec<u8>,
+        v: Vec<u8>,
+    ) -> Self {
+        Self {
+            width,
+            height,
+            planes: VideoFramePlanes::Yuv422,
+            pixfmt: PixelFormat::Yuv422,
+            bit_depth: 8,
+            pts: None,
+            plane_data: vec![
+                VideoPlane {
+                    stride: y_stride,
+                    data: PlaneData::U8(y),
+                },
+                VideoPlane {
+                    stride: u_stride,
+                    data: PlaneData::U8(u),
+                },
+                VideoPlane {
+                    stride: v_stride,
+                    data: PlaneData::U8(v),
+                },
+            ],
+            color_info: ColorInfo::default(),
+            poc: None,
+        }
+    }
+
+    pub fn new_yuv444_u8(
+        width: u32,
+        height: u32,
+        y_stride: usize,
+        u_stride: usize,
+        v_stride: usize,
+        y: Vec<u8>,
+        u: Vec<u8>,
+        v: Vec<u8>,
+    ) -> Self {
+        Self {
+            width,
+            height,
+            planes: VideoFramePlanes::Yuv444,
+            pixfmt: PixelFormat::Yuv444,
+            bit_depth: 8,
+            pts: None,
+            plane_data: vec![
+                VideoPlane {
+                    stride: y_stride,
+                    data: PlaneData::U8(y),
+                },
+                VideoPlane {
+                    stride: u_stride,
+                    data: PlaneData::U8(u),
+                },
+                VideoPlane {
+                    stride: v_stride,
+                    data: PlaneData::U8(v),
+                },
+            ],
+            color_info: ColorInfo::default(),
+            poc: None,
+        }
+    }
+
+    pub fn new_yuv422_u16(
+        width: u32,
+        height: u32,
+        y_stride: usize,
+        u_stride: usize,
+        v_stride: usize,
+        y: Vec<u16>,
+        u: Vec<u16>,
+        v: Vec<u16>,
+        bit_depth: u8,
+    ) -> Self {
+        Self {
+            width,
+            height,
+            planes: VideoFramePlanes::Yuv422,
+            pixfmt: PixelFormat::Yuv422,
+            bit_depth,
+            pts: None,
+            plane_data: vec![
+                VideoPlane {
+                    stride: y_stride,
+                    data: PlaneData::U16(y),
+                },
+                VideoPlane {
+                    stride: u_stride,
+                    data: PlaneData::U16(u),
+                },
+                VideoPlane {
+                    stride: v_stride,
+                    data: PlaneData::U16(v),
+                },
+            ],
+            color_info: ColorInfo::default(),
+            poc: None,
+        }
+    }
+
+    pub fn new_yuv444_u16(
+        width: u32,
+        height: u32,
+        y_stride: usize,
+        u_stride: usize,
+        v_stride: usize,
+        y: Vec<u16>,
+        u: Vec<u16>,
+        v: Vec<u16>,
+        bit_depth: u8,
+    ) -> Self {
+        Self {
+            width,
+            height,
+            planes: VideoFramePlanes::Yuv444,
+            pixfmt: PixelFormat::Yuv444,
+            bit_depth,
+            pts: None,
+            plane_data: vec![
+                VideoPlane {
+                    stride: y_stride,
+                    data: PlaneData::U16(y),
+                },
+                VideoPlane {
+                    stride: u_stride,
+                    data: PlaneData::U16(u),
+                },
+                VideoPlane {
+                    stride: v_stride,
+                    data: PlaneData::U16(v),
+                },
+            ],
+            color_info: ColorInfo::default(),
+            poc: None,
+        }
+    }
+
     pub fn new_nv12_u8(
         width: u32,
         height: u32,

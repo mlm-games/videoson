@@ -18,7 +18,7 @@ A Rust video decode wrapper, with its workspace design being inspired by Symphon
 **Decoding:**
 - H.264 (via `rust_h264`, all platforms)
 - AV1 (via `rav1d-safe`, AGPL-3.0-or-commercial, std-only, 8-bit YUV420)
-- H.265 (via `oxideav-h265`, experimental, basic)
+- H.265 (via `oxideav-h265`, 4:2:0 / 4:2:2 / 4:4:4, 8-16-bit, WPP/tile-parallel decode)
 - VP8 & VP9 (via `oxideav`, experimental, basic)
 
 **Demuxing:**
